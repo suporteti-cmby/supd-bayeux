@@ -231,6 +231,35 @@ function SistemaSPDO({sessao,onLogout}){
   const[autoSync,setAutoSync]=useState(false);
   const[autoInterval,setAutoIntervalVal]=useState(5);
   const[ultimaSync,setUltimaSync]=useState(null);
+
+  // ===== FUNÇÃO 1: PROCESSOS FAVORITOS =====
+  const[favoritos,setFavoritos]=useState([]);
+  
+  // ===== FUNÇÃO 2: GERENCIAMENTO DE PRAZOS =====
+  const[prazos,setPrazos]=useState({});
+  const[showPrazoModal,setShowPrazoModal]=useState(false);
+  const[prazoForm,setPrazoForm]=useState({});
+  
+  // ===== FUNÇÃO 3: MENU RÁPIDO =====
+  const[hoverProto,setHoverProto]=useState(null);
+  
+  // ===== FUNÇÃO 4: SIGILO (LGPD) =====
+  const[showSigiloModal,setShowSigiloModal]=useState(false);
+  const[sigiloForm,setSigiloForm]=useState({});
+  const[sigilo,setSigilo]=useState({});
+  
+  // ===== FUNÇÃO 5: NÃO RECEBIDOS =====
+  // Contador automático no dashboard
+  
+  // ===== FUNÇÃO 6: ESPECIFICAÇÃO NA TABELA =====
+  // Coluna adicional na tabela
+  
+  // ===== FUNÇÃO 7: NÃO VISUALIZADO =====
+  const[naoVisualizados,setNaoVisualizados]=useState({});
+  
+  // ===== FUNÇÃO 8: COMPARADOR IA =====
+  const[showComparador,setShowComparador]=useState(false);
+  const[compDocs,setCompDocs]=useState([]);
   // Gerenciar usuários
   const[novoLogin,setNovoLogin]=useState("");
   const[novaNome,setNovaNome]=useState("");
@@ -314,6 +343,56 @@ function SistemaSPDO({sessao,onLogout}){
   }
 
   function tf(k,v){setTramForm(p=>({...p,[k]:v}));}
+
+  
+  // ===== FUNÇÃO 1: FAVORITOS =====
+  function toggleFavorito(id){
+    setFavoritos(prev => prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id]);
+  }
+  
+  // ===== FUNÇÃO 2: PRAZOS =====
+  function calcularStatusPrazo(dataLimite){
+    if(!dataLimite) return {status:"sem_prazo",dias:null,cor:"#e2e8f0"};
+    const now=new Date();
+    const limit=new Date(dataLimite);
+    const diasRest=Math.ceil((limit-now)/(1000*60*60*24));
+    if(diasRest<0) return{status:"vencido",dias:diasRest,cor:"#ff4444"};
+    if(diasRest<=7) return{status:"urgente",dias:diasRest,cor:"#ff9800"};
+    return{status:"ok",dias:diasRest,cor:"#4caf50"};
+  }
+  
+  function abrirPrazoModal(proto){
+    setPrazoForm({protocolo_id:proto.id,data_limite:prazos[proto.id]?.data_limite||""});
+    setShowPrazoModal(true);
+  }
+  
+  function salvarPrazo(){
+    setPrazos(prev=>({...prev,[prazoForm.protocolo_id]:{data_limite:prazoForm.data_limite}}));
+    setShowPrazoModal(false);
+  }
+  
+  // ===== FUNÇÃO 4: SIGILO =====
+  function abrirSigiloModal(proto){
+    setSigiloForm({protocolo_id:proto.id,nivel:"sigiloso",motivo:"",usuarios_permitidos:[sessao.usuario],data_desclass:""});
+    setShowSigiloModal(true);
+  }
+  
+  function salvarSigilo(){
+    setSigilo(prev=>({...prev,[sigiloForm.protocolo_id]:{...sigiloForm,criado_em:new Date().toISOString()}}));
+    setShowSigiloModal(false);
+  }
+  
+  function verificarSigilo(protoId){
+    const s=sigilo[protoId];
+    if(!s) return true;
+    if(!s.usuarios_permitidos) return false;
+    return s.usuarios_permitidos.includes(sessao.usuario);
+  }
+  
+  // ===== FUNÇÃO 7: NÃO VISUALIZADO =====
+  function toggleNaoVisualizado(id){
+    setNaoVisualizados(prev=>({...prev,[id]:!prev[id]}));
+  }
 
   function handleLogout(){encerrarSessao();onLogout();}
 
@@ -772,7 +851,59 @@ function App(){
       <div style={{textAlign:"center",color:"white"}}>
         <div style={{fontSize:40,marginBottom:12}}>⚖️</div>
         <div style={{fontSize:14,color:"rgba(255,255,255,0.6)"}}>Carregando SPDO...</div>
-      </div>
+      
+      {/* MODAL PRAZO */}
+      {showPrazoModal&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+          <div style={{background:"white",borderRadius:16,padding:32,maxWidth:400,boxShadow:"0 24px 48px rgba(0,0,0,0.3)"}}>
+            <h3 style={{color:"#002060",marginBottom:16}}>⏱️ Definir Prazo</h3>
+            <div style={{marginBottom:14}}>
+              <label style={{fontSize:12,fontWeight:700,color:"#333",marginBottom:5,display:"block"}}>Data Limite</label>
+              <input type="date" style={{width:"100%",padding:10,border:"1px solid #ddd",borderRadius:4}} value={prazoForm.data_limite||""} onChange={e=>setPrazoForm(p=>({...p,data_limite:e.target.value}))}/>
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setShowPrazoModal(false)} style={{flex:1,padding:10,background:"#e2e8f0",border:"none",borderRadius:4,cursor:"pointer"}}>Cancelar</button>
+              <button onClick={salvarPrazo} style={{flex:1,padding:10,background:"#002060",color:"white",border:"none",borderRadius:4,cursor:"pointer"}}>Salvar</button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* MODAL SIGILO */}
+      {showSigiloModal&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+          <div style={{background:"white",borderRadius:16,padding:32,maxWidth:500,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 24px 48px rgba(0,0,0,0.3)"}}>
+            <h3 style={{color:"#002060",marginBottom:16}}>🔒 Classificar Sigilo (LGPD)</h3>
+            
+            <div style={{marginBottom:14}}>
+              <label style={{fontSize:12,fontWeight:700,marginBottom:5,display:"block"}}>Nível de Sigilo</label>
+              <select style={{width:"100%",padding:10,border:"1px solid #ddd",borderRadius:4}} value={sigiloForm.nivel||""} onChange={e=>setSigiloForm(p=>({...p,nivel:e.target.value}))}>
+                <option>Público</option>
+                <option>Restrito</option>
+                <option>Sigiloso</option>
+                <option>Ultra-Sigiloso</option>
+              </select>
+            </div>
+            
+            <div style={{marginBottom:14}}>
+              <label style={{fontSize:12,fontWeight:700,marginBottom:5,display:"block"}}>Motivo</label>
+              <textarea style={{width:"100%",padding:10,border:"1px solid #ddd",borderRadius:4,minHeight:80}} value={sigiloForm.motivo||""} onChange={e=>setSigiloForm(p=>({...p,motivo:e.target.value}))} placeholder="Ex: Informação pessoal (LGPD), Segurança, etc"/>
+            </div>
+            
+            <div style={{marginBottom:14}}>
+              <label style={{fontSize:12,fontWeight:700,marginBottom:5,display:"block"}}>Data de Desclassificação (opcional)</label>
+              <input type="date" style={{width:"100%",padding:10,border:"1px solid #ddd",borderRadius:4}} value={sigiloForm.data_desclass||""} onChange={e=>setSigiloForm(p=>({...p,data_desclass:e.target.value}))}/>
+            </div>
+            
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setShowSigiloModal(false)} style={{flex:1,padding:10,background:"#e2e8f0",border:"none",borderRadius:4,cursor:"pointer"}}>Cancelar</button>
+              <button onClick={salvarSigilo} style={{flex:1,padding:10,background:"#002060",color:"white",border:"none",borderRadius:4,cursor:"pointer"}}>Aplicar Sigilo</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+</div>
     </div>
   );
 
