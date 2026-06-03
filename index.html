@@ -3,304 +3,347 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SUPD — Sistema Unificado de Protocolos de Documentos</title>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <title>SUPD v2.0 - Sistema Unificado de Protocolos</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Roboto', system-ui, sans-serif; background: #f5f5f5; color: #333; }
-    #root { display: flex; flex-direction: column; min-height: 100vh; }
-    input:focus, select:focus, textarea:focus { outline: none; border-color: #002060 !important; }
+    body { font-family: 'Roboto', system-ui, -apple-system, sans-serif; background: #f5f5f5; color: #333; }
+    html, body, #root { height: 100%; }
+    #root { display: flex; flex-direction: column; }
+    input, select, textarea { font-family: inherit; }
+    button { font-family: inherit; }
   </style>
 </head>
 <body>
-<div id="root"></div>
+  <div id="root"></div>
 
-<script type="text/babel">
-const { useState, useEffect } = React;
+  <script type="text/babel">
+    const { useState, useEffect } = React;
 
-// ===== FUNÇÕES AUXILIARES =====
-async function hashSenha(senha) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(senha));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-function getUsuarios() {
-  const u = localStorage.getItem("supd_usuarios");
-  return u ? JSON.parse(u) : null;
-}
-
-async function inicializarUsuarios() {
-  if (!getUsuarios()) {
-    const hash = await hashSenha("Bayeux@2026");
-    const usuarios = { admin: { nome: "Administrador", hash, perfil: "admin" } };
-    localStorage.setItem("supd_usuarios", JSON.stringify(usuarios));
-  }
-}
-
-function getSessao() {
-  try {
-    const s = sessionStorage.getItem("supd_sessao");
-    return s ? JSON.parse(s) : null;
-  } catch {
-    return null;
-  }
-}
-
-function setSessao(usuario, nome, perfil) {
-  sessionStorage.setItem("supd_sessao", JSON.stringify({ usuario, nome, perfil }));
-}
-
-function encerrarSessao() {
-  sessionStorage.removeItem("supd_sessao");
-}
-
-// ===== COMPONENTE LOGIN =====
-function LoginPage({ onLogin }) {
-  const [usuario, setUsuario] = useState("");
-  const [senha, setSenha] = useState("");
-  const [erro, setErro] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  async function handleLogin(e) {
-    e.preventDefault();
-    if (!usuario.trim() || !senha.trim()) {
-      setErro("Preencha usuário e senha");
-      return;
+    async function hashSenha(senha) {
+      const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(senha));
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
     }
-    setLoading(true);
-    setErro("");
-    try {
-      const usuarios = getUsuarios();
-      if (!usuarios || !usuarios[usuario.trim()]) {
-        setErro("Usuário ou senha incorretos");
-        setLoading(false);
-        return;
-      }
-      const hash = await hashSenha(senha);
-      if (hash !== usuarios[usuario.trim()].hash) {
-        setErro("Usuário ou senha incorretos");
-        setLoading(false);
-        return;
-      }
-      const u = usuarios[usuario.trim()];
-      setSessao(usuario.trim(), u.nome, u.perfil);
-      onLogin({ usuario: usuario.trim(), nome: u.nome, perfil: u.perfil });
-    } catch (e) {
-      setErro("Erro interno: " + e.message);
-    }
-    setLoading(false);
-  }
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: "#002060", color: "white" }}>
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-        <div style={{ width: "100%", maxWidth: 420, background: "white", color: "#333", borderRadius: 8, padding: 32, boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
-          <div style={{ textAlign: "center", marginBottom: 32 }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>⚖️</div>
-            <h1 style={{ fontSize: 24, color: "#002060", fontWeight: 700, marginBottom: 4 }}>SUPD</h1>
-            <p style={{ fontSize: 13, color: "#666", marginBottom: 2 }}>Sistema Unificado de Protocolos</p>
-            <p style={{ fontSize: 11, color: "#999" }}>Câmara Municipal de Bayeux • PB</p>
+    function getUsuarios() {
+      const u = localStorage.getItem("supd_usuarios");
+      return u ? JSON.parse(u) : null;
+    }
+
+    async function inicializarUsuarios() {
+      if (!getUsuarios()) {
+        const hash = await hashSenha("Bayeux@2026");
+        const usuarios = { 
+          admin: { 
+            nome: "Administrador", 
+            hash, 
+            perfil: "admin",
+            criado: new Date().toISOString()
+          } 
+        };
+        localStorage.setItem("supd_usuarios", JSON.stringify(usuarios));
+      }
+    }
+
+    function getSessao() {
+      try {
+        const s = sessionStorage.getItem("supd_sessao");
+        return s ? JSON.parse(s) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function setSessao(usuario, nome, perfil) {
+      sessionStorage.setItem("supd_sessao", JSON.stringify({ usuario, nome, perfil, inicio: new Date().toISOString() }));
+    }
+
+    function encerrarSessao() {
+      sessionStorage.removeItem("supd_sessao");
+    }
+
+    function LoginPage({ onLogin }) {
+      const [usuario, setUsuario] = useState("");
+      const [senha, setSenha] = useState("");
+      const [erro, setErro] = useState("");
+      const [loading, setLoading] = useState(false);
+      const [mostrarSenha, setMostrarSenha] = useState(false);
+
+      async function handleLogin(e) {
+        e.preventDefault();
+        if (!usuario.trim() || !senha.trim()) {
+          setErro("Preencha usuário e senha");
+          return;
+        }
+        setLoading(true);
+        setErro("");
+        try {
+          const usuarios = getUsuarios();
+          if (!usuarios || !usuarios[usuario.trim()]) {
+            setErro("Usuário ou senha incorretos");
+            setLoading(false);
+            return;
+          }
+          const hash = await hashSenha(senha);
+          if (hash !== usuarios[usuario.trim()].hash) {
+            setErro("Usuário ou senha incorretos");
+            setLoading(false);
+            return;
+          }
+          const u = usuarios[usuario.trim()];
+          setSessao(usuario.trim(), u.nome, u.perfil);
+          onLogin({ usuario: usuario.trim(), nome: u.nome, perfil: u.perfil });
+        } catch (e) {
+          setErro("Erro: " + e.message);
+        }
+        setLoading(false);
+      }
+
+      return (
+        <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: "#002060", color: "white" }}>
+          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+            <div style={{ width: "100%", maxWidth: 420, background: "white", color: "#333", borderRadius: 8, padding: 32, boxShadow: "0 8px 24px rgba(0,0,0,0.3)" }}>
+              <div style={{ textAlign: "center", marginBottom: 32 }}>
+                <div style={{ fontSize: 56, marginBottom: 16 }}>⚖️</div>
+                <h1 style={{ fontSize: 28, color: "#002060", fontWeight: 700, letterSpacing: "2px" }}>SUPD</h1>
+                <p style={{ fontSize: 13, color: "#666", marginTop: 8 }}>Sistema Unificado de Protocolos de Documentos</p>
+                <p style={{ fontSize: 11, color: "#999", marginTop: 4 }}>Câmara Municipal de Bayeux • Paraíba</p>
+              </div>
+
+              <form onSubmit={handleLogin}>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#333", marginBottom: 6 }}>Usuário</label>
+                  <input
+                    type="text"
+                    style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: 4, fontSize: 13 }}
+                    value={usuario}
+                    onChange={e => setUsuario(e.target.value)}
+                    placeholder="Digite seu usuário"
+                    disabled={loading}
+                  />
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#333", marginBottom: 6 }}>Senha</label>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      type={mostrarSenha ? "text" : "password"}
+                      style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: 4, fontSize: 13 }}
+                      value={senha}
+                      onChange={e => setSenha(e.target.value)}
+                      placeholder="Digite sua senha"
+                      disabled={loading}
+                    />
+                  </div>
+                </div>
+
+                {erro && <div style={{ background: "#fee2e2", color: "#991b1b", padding: "10px 12px", borderRadius: 4, fontSize: 13, marginBottom: 16, border: "1px solid #fca5a5" }}>{erro}</div>}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    width: "100%",
+                    padding: "11px 16px",
+                    background: "#002060",
+                    color: "white",
+                    border: "none",
+                    borderRadius: 4,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: loading ? "not-allowed" : "pointer",
+                    opacity: loading ? 0.7 : 1
+                  }}
+                >
+                  {loading ? "Verificando..." : "Entrar no Sistema"}
+                </button>
+              </form>
+            </div>
           </div>
 
-          <form onSubmit={handleLogin}>
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#333", marginBottom: 5 }}>Usuário</label>
-              <input
-                style={{ width: "100%", padding: 10, border: "1px solid #ddd", borderRadius: 4, fontSize: 13 }}
-                value={usuario}
-                onChange={e => setUsuario(e.target.value)}
-                placeholder="Digite seu usuário"
-              />
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#333", marginBottom: 5 }}>Senha</label>
-              <input
-                type="password"
-                style={{ width: "100%", padding: 10, border: "1px solid #ddd", borderRadius: 4, fontSize: 13 }}
-                value={senha}
-                onChange={e => setSenha(e.target.value)}
-                placeholder="Digite sua senha"
-              />
-            </div>
-
-            {erro && <div style={{ background: "#fee2e2", border: "1px solid #fca5a5", color: "#991b1b", padding: 10, borderRadius: 4, fontSize: 13, marginBottom: 16 }}>{erro}</div>}
-
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                width: "100%",
-                padding: 11,
-                background: "#002060",
-                color: "white",
-                border: "none",
-                borderRadius: 4,
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: "pointer",
-                opacity: loading ? 0.7 : 1
-              }}
-            >
-              {loading ? "Verificando..." : "Entrar"}
-            </button>
-          </form>
-        </div>
-      </div>
-
-      <div style={{ background: "#001a4d", borderTop: "1px solid rgba(255,255,255,0.1)", padding: 16, textAlign: "center", fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
-        <p>SUPD v2.0 • Câmara Municipal de Bayeux</p>
-      </div>
-    </div>
-  );
-}
-
-// ===== COMPONENTE PRINCIPAL =====
-function Dashboard({ sessao, onLogout }) {
-  const [protos, setProtos] = useState([]);
-  const [page, setPage] = useState("dashboard");
-
-  useEffect(() => {
-    try {
-      const r = localStorage.getItem("supd_protos");
-      if (r) setProtos(JSON.parse(r));
-    } catch {}
-  }, []);
-
-  function save(list) {
-    try {
-      localStorage.setItem("supd_protos", JSON.stringify(list));
-    } catch {}
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: "#f5f5f5" }}>
-      {/* HEADER */}
-      <div style={{ background: "#002060", color: "white", borderBottom: "3px solid #FFD700", padding: "16px 20px" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <div style={{ fontSize: 28 }}>⚖️</div>
-            <h1 style={{ fontSize: 20, fontWeight: 700 }}>SUPD v2.0</h1>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-            <span style={{ fontSize: 13 }}>👤 {sessao.nome}</span>
-            <button
-              onClick={() => { encerrarSessao(); onLogout(); }}
-              style={{ background: "rgba(255,255,255,0.2)", border: "none", borderRadius: 4, padding: "6px 12px", color: "white", cursor: "pointer", fontSize: 12 }}
-            >
-              Sair
-            </button>
+          <div style={{ background: "#001a4d", borderTop: "1px solid rgba(255,255,255,0.1)", padding: "16px", textAlign: "center", fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
+            <p>SUPD v2.0 • Câmara Municipal de Bayeux • 2026</p>
           </div>
         </div>
-      </div>
+      );
+    }
 
-      {/* CONTENT */}
-      <div style={{ flex: 1, padding: 20, maxWidth: 1200, margin: "0 auto", width: "100%" }}>
-        {page === "dashboard" && (
-          <div>
-            <h2 style={{ color: "#002060", marginBottom: 20, fontSize: 24 }}>Dashboard</h2>
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-              gap: 16,
-              marginBottom: 20
-            }}>
-              <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
-                <div style={{ fontSize: 32, fontWeight: 700, color: "#002060" }}>{protos.length}</div>
-                <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>Total de Protocolos</div>
+    function Dashboard({ sessao, onLogout }) {
+      const [protos, setProtos] = useState([]);
+      const [page, setPage] = useState("dashboard");
+      const [search, setSearch] = useState("");
+
+      useEffect(() => {
+        try {
+          const r = localStorage.getItem("supd_protos");
+          if (r) setProtos(JSON.parse(r));
+        } catch {}
+      }, []);
+
+      function save(list) {
+        try {
+          localStorage.setItem("supd_protos", JSON.stringify(list));
+        } catch {}
+      }
+
+      const stats = {
+        total: protos.length,
+        tramitando: protos.filter(p => p.situacao === "Em Tramitação").length,
+        naoRecebidos: protos.filter(p => p.situacao === "Aguardando Recebimento").length
+      };
+
+      return (
+        <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: "#f5f5f5" }}>
+          {/* HEADER */}
+          <div style={{ background: "#002060", color: "white", borderBottom: "3px solid #FFD700", padding: "14px 20px" }}>
+            <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <div style={{ fontSize: 28 }}>⚖️</div>
+                <h1 style={{ fontSize: 20, fontWeight: 700 }}>SUPD v2.0</h1>
               </div>
-              <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
-                <div style={{ fontSize: 32, fontWeight: 700, color: "#FF9800" }}>{protos.filter(p => p.situacao === "Em Tramitação").length}</div>
-                <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>Em Tramitação</div>
-              </div>
-              <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
-                <div style={{ fontSize: 32, fontWeight: 700, color: "#FF6B6B" }}>{protos.filter(p => p.situacao === "Aguardando Recebimento").length}</div>
-                <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>📬 Não Recebidos</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+                <span style={{ fontSize: 13 }}>👤 {sessao.nome}</span>
+                <button
+                  onClick={() => { encerrarSessao(); onLogout(); }}
+                  style={{
+                    background: "rgba(255,255,255,0.2)",
+                    border: "none",
+                    borderRadius: 4,
+                    padding: "6px 12px",
+                    color: "white",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 500
+                  }}
+                >
+                  Sair
+                </button>
               </div>
             </div>
-
-            <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
-              <h3 style={{ color: "#002060", marginBottom: 16 }}>Protocolos Registrados</h3>
-              {protos.length === 0 ? (
-                <p style={{ color: "#999", textAlign: "center", padding: 20 }}>Nenhum protocolo registrado ainda</p>
-              ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ borderBottom: "2px solid #ddd" }}>
-                      <th style={{ padding: 12, textAlign: "left", fontSize: 12, fontWeight: 700, color: "#666" }}>Número</th>
-                      <th style={{ padding: 12, textAlign: "left", fontSize: 12, fontWeight: 700, color: "#666" }}>Assunto</th>
-                      <th style={{ padding: 12, textAlign: "left", fontSize: 12, fontWeight: 700, color: "#666" }}>Situação</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {protos.map(p => (
-                      <tr key={p.id} style={{ borderBottom: "1px solid #eee" }}>
-                        <td style={{ padding: 12, fontFamily: "monospace", fontWeight: 700, color: "#002060" }}>{p.numero}</td>
-                        <td style={{ padding: 12 }}>{p.assunto}</td>
-                        <td style={{ padding: 12 }}>
-                          <span style={{ background: "#d4edda", color: "#155724", padding: "4px 8px", borderRadius: 4, fontSize: 11, fontWeight: 700 }}>
-                            {p.situacao}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
           </div>
-        )}
 
-        {page === "novo" && (
-          <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 24 }}>
-            <h2 style={{ color: "#002060", marginBottom: 16 }}>Novo Protocolo</h2>
-            <p style={{ color: "#666" }}>Funcionalidade em desenvolvimento...</p>
+          {/* CONTENT */}
+          <div style={{ flex: 1, padding: "20px", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
+            {page === "dashboard" && (
+              <div>
+                <h2 style={{ color: "#002060", marginBottom: 20, fontSize: 24, fontWeight: 700 }}>Dashboard</h2>
+                
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 20 }}>
+                  <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
+                    <div style={{ fontSize: 32, fontWeight: 700, color: "#002060" }}>{stats.total}</div>
+                    <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>Total de Protocolos</div>
+                  </div>
+                  <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
+                    <div style={{ fontSize: 32, fontWeight: 700, color: "#FF9800" }}>{stats.tramitando}</div>
+                    <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>Em Tramitação</div>
+                  </div>
+                  <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
+                    <div style={{ fontSize: 32, fontWeight: 700, color: "#FF6B6B" }}>{stats.naoRecebidos}</div>
+                    <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>📬 Não Recebidos</div>
+                  </div>
+                </div>
+
+                <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
+                  <h3 style={{ color: "#002060", marginBottom: 16, fontSize: 16, fontWeight: 700 }}>Protocolos Registrados</h3>
+                  
+                  <div style={{ marginBottom: 16 }}>
+                    <input
+                      placeholder="🔍 Buscar protocolo..."
+                      value={search}
+                      onChange={e => setSearch(e.target.value)}
+                      style={{ width: "100%", maxWidth: 300, padding: "8px 12px", border: "1px solid #ddd", borderRadius: 4, fontSize: 13 }}
+                    />
+                  </div>
+
+                  {protos.length === 0 ? (
+                    <p style={{ color: "#999", textAlign: "center", padding: "40px 20px" }}>
+                      Nenhum protocolo registrado ainda
+                    </p>
+                  ) : (
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ borderBottom: "2px solid #ddd" }}>
+                          <th style={{ padding: "12px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#666" }}>Número</th>
+                          <th style={{ padding: "12px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#666" }}>Assunto</th>
+                          <th style={{ padding: "12px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#666" }}>Situação</th>
+                          <th style={{ padding: "12px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#666" }}>Prioridade</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {protos.map(p => (
+                          <tr key={p.id} style={{ borderBottom: "1px solid #eee" }}>
+                            <td style={{ padding: "12px", fontFamily: "monospace", fontWeight: 700, color: "#002060" }}>{p.numero}</td>
+                            <td style={{ padding: "12px" }}>{p.assunto}</td>
+                            <td style={{ padding: "12px" }}>
+                              <span style={{ background: "#d4edda", color: "#155724", padding: "4px 8px", borderRadius: 4, fontSize: 11, fontWeight: 700 }}>
+                                {p.situacao || "—"}
+                              </span>
+                            </td>
+                            <td style={{ padding: "12px", fontSize: 12 }}>{p.prioridade || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {page === "novo" && (
+              <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 24 }}>
+                <h2 style={{ color: "#002060", marginBottom: 16, fontSize: 18, fontWeight: 700 }}>Novo Protocolo</h2>
+                <p style={{ color: "#666" }}>🚀 Funcionalidade em desenvolvimento...</p>
+              </div>
+            )}
+
+            {page === "config" && (
+              <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 24 }}>
+                <h2 style={{ color: "#002060", marginBottom: 16, fontSize: 18, fontWeight: 700 }}>Configurações</h2>
+                <p style={{ color: "#666" }}>⚙️ Funcionalidade em desenvolvimento...</p>
+              </div>
+            )}
           </div>
-        )}
 
-        {page === "config" && (
-          <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 24 }}>
-            <h2 style={{ color: "#002060", marginBottom: 16 }}>Configurações</h2>
-            <p style={{ color: "#666" }}>Funcionalidade em desenvolvimento...</p>
+          {/* FOOTER */}
+          <div style={{ background: "#f9f9f9", borderTop: "1px solid #ddd", padding: "16px", textAlign: "center", fontSize: 12, color: "#999" }}>
+            <p>© 2026 Câmara Municipal de Bayeux • SUPD v2.0</p>
           </div>
-        )}
-      </div>
+        </div>
+      );
+    }
 
-      {/* FOOTER */}
-      <div style={{ background: "#f9f9f9", borderTop: "1px solid #ddd", padding: "16px 0", textAlign: "center", fontSize: 12, color: "#999" }}>
-        <p>© 2026 Câmara Municipal de Bayeux • SUPD v2.0</p>
-      </div>
-    </div>
-  );
-}
+    function App() {
+      const [sessao, setSessao] = useState(null);
+      const [inicializado, setInicializado] = useState(false);
 
-// ===== APP PRINCIPAL =====
-function App() {
-  const [sessao, setSessao] = useState(null);
-  const [inicializado, setInicializado] = useState(false);
+      useEffect(() => {
+        inicializarUsuarios().then(() => {
+          const s = getSessao();
+          setSessao(s);
+          setInicializado(true);
+        });
+      }, []);
 
-  useEffect(() => {
-    inicializarUsuarios().then(() => {
-      const s = getSessao();
-      setSessao(s);
-      setInicializado(true);
-    });
-  }, []);
+      if (!inicializado) {
+        return (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#002060", color: "white", fontSize: 18, flexDirection: "column", gap: 16 }}>
+            <div style={{ fontSize: 48 }}>⚖️</div>
+            Carregando SUPD...
+          </div>
+        );
+      }
 
-  if (!inicializado) {
-    return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#002060", color: "white", fontSize: 18 }}>Carregando SUPD...</div>;
-  }
+      if (!sessao) {
+        return <LoginPage onLogin={s => setSessao(s)} />;
+      }
 
-  if (!sessao) {
-    return <LoginPage onLogin={s => setSessao(s)} />;
-  }
+      return <Dashboard sessao={sessao} onLogout={() => setSessao(null)} />;
+    }
 
-  return <Dashboard sessao={sessao} onLogout={() => setSessao(null)} />;
-}
-
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-</script>
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
 </body>
 </html>
