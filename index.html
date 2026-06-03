@@ -1,349 +1,786 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SUPD v2.0 - Sistema Unificado de Protocolos</title>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SPDO — Câmara Municipal de Bayeux</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+  <meta http-equiv="Pragma" content="no-cache"/>
+  <meta http-equiv="Expires" content="0"/>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700;800&family=IBM+Plex+Mono&display=swap" rel="stylesheet"/>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Roboto', system-ui, -apple-system, sans-serif; background: #f5f5f5; color: #333; }
-    html, body, #root { height: 100%; }
-    #root { display: flex; flex-direction: column; }
-    input, select, textarea { font-family: inherit; }
-    button { font-family: inherit; }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:#f0f4f8;}
+    input:focus,select:focus,textarea:focus{border-color:#002060!important;outline:none;}
+    ::-webkit-scrollbar{width:6px;height:6px;}
+    ::-webkit-scrollbar-track{background:#f1f5f9;}
+    ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px;}
+    @keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
   </style>
 </head>
 <body>
-  <div id="root"></div>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const{useState,useEffect,useCallback}=React;
 
-  <script type="text/babel">
-    const { useState, useEffect } = React;
+/* ─── CONSTANTES DO SISTEMA ──────────────────────────────────── */
+const AREAS=["Presidência","1ª Vice-Presidência","2ª Vice-Presidência","Diretoria Geral","Secretaria Legislativa","Controladoria Interna","Recursos Humanos","Setor Financeiro","Assessoria Jurídica","Setor de Protocolo","Plenário","Comissão Permanente","Comissão Especial","Gabinete de Vereador","Outro"];
+const TIPOS=["Ofício","Requerimento","Ata de Reunião","Decreto Legislativo","Resolução","Portaria","Memorando Interno","Contrato","Convênio","Lei Ordinária","Lei Complementar","Indicação","Moção","Outro"];
+const SITUACOES=["Em Tramitação","Aguardando Recebimento","Recebido","Em Análise","Arquivado","Devolvido","Cancelado","Concluído"];
+const STATUS_CFG={"Em Tramitação":{bg:"#fef9c3",text:"#854d0e",dot:"#ca8a04"},"Aguardando Recebimento":{bg:"#dbeafe",text:"#1e40af",dot:"#3b82f6"},"Recebido":{bg:"#dcfce7",text:"#166534",dot:"#22c55e"},"Em Análise":{bg:"#f3e8ff",text:"#6b21a8",dot:"#a855f7"},"Arquivado":{bg:"#f1f5f9",text:"#475569",dot:"#94a3b8"},"Devolvido":{bg:"#ffedd5",text:"#9a3412",dot:"#f97316"},"Cancelado":{bg:"#fee2e2",text:"#7f1d1d",dot:"#dc2626"},"Concluído":{bg:"#dcfce7",text:"#14532d",dot:"#15803d"}};
+const PRIO_CFG={Normal:"#64748b",Urgente:"#d97706","Muito Urgente":"#dc2626",Confidencial:"#7c3aed"};
+const STEPS=[{n:1,label:"Protocolo",icon:"📋"},{n:2,label:"Origem",icon:"🏛️"},{n:3,label:"Destino",icon:"📨"},{n:4,label:"Situação",icon:"📊"},{n:5,label:"Arquivos",icon:"📁"},{n:6,label:"Notificação",icon:"🔔"}];
+const NAV=[{id:"dashboard",label:"Dashboard",icon:"🏠"},{id:"form",label:"Novo Protocolo",icon:"📝"},{id:"config",label:"Configurações",icon:"⚙️"}];
+const JF_FORM_ID="261497262853062";
+const SESSION_TIMEOUT=8*60*60*1000; // 8 horas
 
-    async function hashSenha(senha) {
-      const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(senha));
-      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+/* ─── FUNÇÕES DE SEGURANÇA ───────────────────────────────────── */
+async function hashSenha(senha){
+  const buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(senha));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+
+function getUsuarios(){
+  const u=localStorage.getItem("spdo_usuarios");
+  return u?JSON.parse(u):null;
+}
+
+async function inicializarUsuarios(){
+  if(!getUsuarios()){
+    const hash=await hashSenha("Bayeux@2026");
+    const usuarios={admin:{nome:"Administrador",hash,perfil:"admin",criado:new Date().toISOString()}};
+    localStorage.setItem("spdo_usuarios",JSON.stringify(usuarios));
+  }
+}
+
+function getSessao(){
+  try{
+    const s=sessionStorage.getItem("spdo_sessao");
+    if(!s)return null;
+    const sessao=JSON.parse(s);
+    if(Date.now()-new Date(sessao.inicio).getTime()>SESSION_TIMEOUT){
+      sessionStorage.removeItem("spdo_sessao");
+      return null;
     }
+    return sessao;
+  }catch{return null;}
+}
 
-    function getUsuarios() {
-      const u = localStorage.getItem("supd_usuarios");
-      return u ? JSON.parse(u) : null;
-    }
+function setSessao(usuario,nome,perfil){
+  sessionStorage.setItem("spdo_sessao",JSON.stringify({usuario,nome,perfil,inicio:new Date().toISOString()}));
+}
 
-    async function inicializarUsuarios() {
-      if (!getUsuarios()) {
-        const hash = await hashSenha("Bayeux@2026");
-        const usuarios = { 
-          admin: { 
-            nome: "Administrador", 
-            hash, 
-            perfil: "admin",
-            criado: new Date().toISOString()
-          } 
-        };
-        localStorage.setItem("supd_usuarios", JSON.stringify(usuarios));
+function encerrarSessao(){sessionStorage.removeItem("spdo_sessao");}
+
+/* ─── UTILITÁRIOS ────────────────────────────────────────────── */
+function genNum(){return `SPDO-${new Date().getFullYear()}-${String(Math.floor(Math.random()*99999)+1).padStart(5,"0")}`;}
+function today(){return new Date().toISOString().split("T")[0];}
+function blank(){return{numero:genNum(),tipo_documento:"",assunto:"",data_criacao:today(),descricao:"",area_origem:"",responsavel_origem:"",email_origem:"",data_encaminhamento:today(),area_destino:"",responsavel_destino:"",email_destino:"",data_tramitacao:today(),situacao:"Em Tramitação",prioridade:"Normal",observacoes_tramitacao:"",email_notificacao:"",email_notificacao2:"",aceitar_notificacoes:"Sim",link_drive:""};}
+
+/* ─── ESTILOS GLOBAIS ────────────────────────────────────────── */
+const s={
+  input:{width:"100%",padding:"11px 14px",border:"1.5px solid #cbd5e1",borderRadius:8,fontSize:14,fontFamily:"inherit",color:"#1e293b",background:"white",boxSizing:"border-box"},
+  sel:{width:"100%",padding:"9px 12px",border:"1.5px solid #cbd5e1",borderRadius:8,fontSize:13,fontFamily:"inherit",color:"#1e293b",background:"white",boxSizing:"border-box"},
+  ta:{width:"100%",padding:"9px 12px",border:"1.5px solid #cbd5e1",borderRadius:8,fontSize:13,fontFamily:"inherit",color:"#1e293b",background:"white",boxSizing:"border-box",resize:"vertical"},
+  btn:(v="primary")=>({padding:"10px 20px",borderRadius:8,border:"none",cursor:"pointer",fontSize:14,fontWeight:600,fontFamily:"inherit",transition:"opacity 0.15s",...(v==="primary"?{background:"#002060",color:"white"}:v==="success"?{background:"#15803d",color:"white"}:v==="gold"?{background:"#b45309",color:"white"}:v==="danger"?{background:"#dc2626",color:"white"}:{background:"#f1f5f9",color:"#334155",border:"1px solid #cbd5e1"})}),
+  card:{background:"white",borderRadius:12,border:"1px solid #e2e8f0",padding:20,marginBottom:16},
+  hd:{fontSize:13,fontWeight:700,color:"#002060",paddingBottom:12,marginBottom:16,borderBottom:"2px solid #e2e8f0",display:"flex",alignItems:"center",gap:8},
+  g2:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14},
+};
+
+/* ─── COMPONENTES COMPARTILHADOS ─────────────────────────────── */
+function Fld({label,required,hint,children}){return(<div style={{marginBottom:16}}><label style={{display:"block",fontSize:11,fontWeight:700,color:"#475569",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.04em"}}>{label}{required&&<span style={{color:"#dc2626"}}> *</span>}</label>{children}{hint&&<p style={{fontSize:11,color:"#94a3b8",marginTop:4}}>{hint}</p>}</div>);}
+function SBadge({status}){const c=STATUS_CFG[status]||{bg:"#f1f5f9",text:"#475569",dot:"#94a3b8"};return <span style={{display:"inline-flex",alignItems:"center",gap:5,background:c.bg,color:c.text,padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}><span style={{width:6,height:6,borderRadius:"50%",background:c.dot}}/>{status}</span>;}
+function PBadge({p}){const c=PRIO_CFG[p]||"#64748b";return <span style={{background:c+"1a",color:c,padding:"2px 8px",borderRadius:6,fontSize:11,fontWeight:700}}>{p}</span>;}
+function RadioG({name,value,options,onChange}){return <div style={{display:"flex",gap:20,flexWrap:"wrap"}}>{options.map(o=>(<label key={o} style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:13}}><input type="radio" name={name} value={o} checked={value===o} onChange={()=>onChange(o)} style={{accentColor:"#002060"}}/>{o}</label>))}</div>;}
+
+/* ════════════════════════════════════════════════════════════════
+   TELA DE LOGIN
+════════════════════════════════════════════════════════════════ */
+function LoginPage({onLogin}){
+  const[usuario,setUsuario]=useState("");
+  const[senha,setSenha]=useState("");
+  const[erro,setErro]=useState("");
+  const[loading,setLoading]=useState(false);
+  const[mostrarSenha,setMostrarSenha]=useState(false);
+  const[tentativas,setTentativas]=useState(0);
+  const bloqueado=tentativas>=5;
+
+  async function handleLogin(e){
+    e.preventDefault();
+    if(bloqueado){setErro("Muitas tentativas. Recarregue a página.");return;}
+    if(!usuario.trim()||!senha.trim()){setErro("Preencha o usuário e a senha.");return;}
+    setLoading(true);setErro("");
+    try{
+      const usuarios=getUsuarios();
+      if(!usuarios||!usuarios[usuario.trim()]){
+        setTentativas(t=>t+1);
+        setErro("Usuário ou senha incorretos.");
+        setLoading(false);return;
       }
-    }
-
-    function getSessao() {
-      try {
-        const s = sessionStorage.getItem("supd_sessao");
-        return s ? JSON.parse(s) : null;
-      } catch {
-        return null;
+      const hash=await hashSenha(senha);
+      if(hash!==usuarios[usuario.trim()].hash){
+        setTentativas(t=>t+1);
+        setErro(`Usuário ou senha incorretos.${tentativas>=3?" ("+( 5-tentativas-1)+" tentativa(s) restante(s))":""}`);
+        setLoading(false);return;
       }
-    }
+      const u=usuarios[usuario.trim()];
+      setSessao(usuario.trim(),u.nome,u.perfil);
+      onLogin({usuario:usuario.trim(),nome:u.nome,perfil:u.perfil});
+    }catch{setErro("Erro interno. Tente novamente.");}
+    setLoading(false);
+  }
 
-    function setSessao(usuario, nome, perfil) {
-      sessionStorage.setItem("supd_sessao", JSON.stringify({ usuario, nome, perfil, inicio: new Date().toISOString() }));
-    }
+  return(
+    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#001040 0%,#002060 50%,#003090 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      {/* Brasão / Logo */}
+      <div style={{width:"100%",maxWidth:420}}>
 
-    function encerrarSessao() {
-      sessionStorage.removeItem("supd_sessao");
-    }
+        {/* Cabeçalho institucional */}
+        <div style={{textAlign:"center",marginBottom:32}}>
+          <div style={{fontSize:52,marginBottom:8}}>⚖️</div>
+          <h1 style={{color:"#FFD700",fontSize:22,fontWeight:800,letterSpacing:"0.06em"}}>SPDO</h1>
+          <p style={{color:"rgba(255,255,255,0.8)",fontSize:13,marginTop:4,fontWeight:600}}>Sistema de Protocolo de Documentos</p>
+          <div style={{width:48,height:2,background:"#FFD700",margin:"12px auto"}}/>
+          <p style={{color:"rgba(255,255,255,0.55)",fontSize:12}}>Câmara Municipal de Bayeux · Paraíba · Brasil</p>
+        </div>
 
-    function LoginPage({ onLogin }) {
-      const [usuario, setUsuario] = useState("");
-      const [senha, setSenha] = useState("");
-      const [erro, setErro] = useState("");
-      const [loading, setLoading] = useState(false);
-      const [mostrarSenha, setMostrarSenha] = useState(false);
+        {/* Card de login */}
+        <div style={{background:"white",borderRadius:16,padding:"36px 32px",boxShadow:"0 24px 48px rgba(0,0,0,0.3)"}}>
+          <h2 style={{fontSize:17,fontWeight:800,color:"#002060",marginBottom:6}}>Acesso Restrito</h2>
+          <p style={{fontSize:13,color:"#94a3b8",marginBottom:24}}>Informe suas credenciais para acessar o sistema.</p>
 
-      async function handleLogin(e) {
-        e.preventDefault();
-        if (!usuario.trim() || !senha.trim()) {
-          setErro("Preencha usuário e senha");
-          return;
-        }
-        setLoading(true);
-        setErro("");
-        try {
-          const usuarios = getUsuarios();
-          if (!usuarios || !usuarios[usuario.trim()]) {
-            setErro("Usuário ou senha incorretos");
-            setLoading(false);
-            return;
-          }
-          const hash = await hashSenha(senha);
-          if (hash !== usuarios[usuario.trim()].hash) {
-            setErro("Usuário ou senha incorretos");
-            setLoading(false);
-            return;
-          }
-          const u = usuarios[usuario.trim()];
-          setSessao(usuario.trim(), u.nome, u.perfil);
-          onLogin({ usuario: usuario.trim(), nome: u.nome, perfil: u.perfil });
-        } catch (e) {
-          setErro("Erro: " + e.message);
-        }
-        setLoading(false);
-      }
+          {bloqueado&&(
+            <div style={{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:8,padding:"12px 14px",marginBottom:16,fontSize:13,color:"#991b1b",fontWeight:600}}>
+              🔒 Acesso bloqueado após 5 tentativas incorretas. Recarregue a página para tentar novamente.
+            </div>
+          )}
 
-      return (
-        <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: "#002060", color: "white" }}>
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
-            <div style={{ width: "100%", maxWidth: 420, background: "white", color: "#333", borderRadius: 8, padding: 32, boxShadow: "0 8px 24px rgba(0,0,0,0.3)" }}>
-              <div style={{ textAlign: "center", marginBottom: 32 }}>
-                <div style={{ fontSize: 56, marginBottom: 16 }}>⚖️</div>
-                <h1 style={{ fontSize: 28, color: "#002060", fontWeight: 700, letterSpacing: "2px" }}>SUPD</h1>
-                <p style={{ fontSize: 13, color: "#666", marginTop: 8 }}>Sistema Unificado de Protocolos de Documentos</p>
-                <p style={{ fontSize: 11, color: "#999", marginTop: 4 }}>Câmara Municipal de Bayeux • Paraíba</p>
+          <form onSubmit={handleLogin}>
+            <Fld label="Usuário" required>
+              <div style={{position:"relative"}}>
+                <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:16}}>👤</span>
+                <input
+                  style={{...s.input,paddingLeft:38}}
+                  value={usuario} onChange={e=>setUsuario(e.target.value)}
+                  placeholder="Digite seu usuário" autoComplete="username"
+                  disabled={bloqueado}
+                />
               </div>
+            </Fld>
 
-              <form onSubmit={handleLogin}>
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#333", marginBottom: 6 }}>Usuário</label>
-                  <input
-                    type="text"
-                    style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: 4, fontSize: 13 }}
-                    value={usuario}
-                    onChange={e => setUsuario(e.target.value)}
-                    placeholder="Digite seu usuário"
-                    disabled={loading}
-                  />
+            <Fld label="Senha" required>
+              <div style={{position:"relative"}}>
+                <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:16}}>🔑</span>
+                <input
+                  style={{...s.input,paddingLeft:38,paddingRight:44}}
+                  type={mostrarSenha?"text":"password"}
+                  value={senha} onChange={e=>setSenha(e.target.value)}
+                  placeholder="Digite sua senha" autoComplete="current-password"
+                  disabled={bloqueado}
+                />
+                <button type="button" onClick={()=>setMostrarSenha(v=>!v)}
+                  style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:16,color:"#94a3b8"}}>
+                  {mostrarSenha?"🙈":"👁️"}
+                </button>
+              </div>
+            </Fld>
+
+            {erro&&(
+              <div style={{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#991b1b"}}>
+                ⚠️ {erro}
+              </div>
+            )}
+
+            <button type="submit" disabled={loading||bloqueado}
+              style={{...s.btn("primary"),width:"100%",padding:"13px",fontSize:15,marginTop:4,opacity:(loading||bloqueado)?0.7:1}}>
+              {loading?"⏳ Verificando...":"🔐 Entrar no Sistema"}
+            </button>
+          </form>
+
+        </div>
+
+        <p style={{textAlign:"center",color:"rgba(255,255,255,0.3)",fontSize:11,marginTop:20}}>
+          SPDO v1.1 · Interlegis · Sessão válida por 8 horas
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SISTEMA PRINCIPAL (APÓS LOGIN)
+════════════════════════════════════════════════════════════════ */
+function SistemaSPDO({sessao,onLogout}){
+  const[page,setPage]=useState("dashboard");
+  const[protos,setProtos]=useState([]);
+  const[form,setForm]=useState(blank());
+  const[step,setStep]=useState(1);
+  const[submitting,setSubmitting]=useState(false);
+  const[success,setSuccess]=useState(false);
+  const[aiLoading,setAiLoading]=useState(false);
+  const[aiEmail,setAiEmail]=useState("");
+  const[sel,setSel]=useState(null);
+  const[search,setSearch]=useState("");
+  const[jfKey,setJfKey]=useState("");
+  const[syncing,setSyncing]=useState(false);
+  const[syncMsg,setSyncMsg]=useState("");
+  const[autoSync,setAutoSync]=useState(false);
+  const[autoInterval,setAutoIntervalVal]=useState(5);
+  const[ultimaSync,setUltimaSync]=useState(null);
+  // Gerenciar usuários
+  const[novoLogin,setNovoLogin]=useState("");
+  const[novaNome,setNovaNome]=useState("");
+  const[novaSenha,setNovaSenha]=useState("");
+  const[senhaAtual,setSenhaAtual]=useState("");
+  const[novaSenha2,setNovaSenha2]=useState("");
+  const[msgSenha,setMsgSenha]=useState("");
+  const[usuarios,setUsuarios]=useState({});
+  const[showConfirmLogout,setShowConfirmLogout]=useState(false);
+  const[showTramitar,setShowTramitar]=useState(false);
+  const[tramForm,setTramForm]=useState({});
+  const[tramitando,setTramitando]=useState(false);
+
+  useEffect(()=>{
+    try{const r=localStorage.getItem("spdo_protos");if(r)setProtos(JSON.parse(r));}catch{}
+    try{const k=localStorage.getItem("jf_key");if(k)setJfKey(k);}catch{}
+    setUsuarios(getUsuarios()||{});
+  },[]);
+
+  // Auto sync effect
+  useEffect(()=>{
+    if(!autoSync||!jfKey)return;
+    const id=setInterval(()=>{
+      syncJotform(true);
+    },autoInterval*60*1000);
+    return()=>clearInterval(id);
+  },[autoSync,autoInterval,jfKey]);
+
+  function save(list){try{localStorage.setItem("spdo_protos",JSON.stringify(list));}catch{}}
+  function sf(k,v){setForm(p=>({...p,[k]:v}));}
+
+  function abrirTramitar(proto){
+    setTramForm({
+      area_destino:"",
+      responsavel_destino:"",
+      email_destino:"",
+      data_tramitacao:today(),
+      situacao:proto.situacao,
+      prioridade:proto.prioridade,
+      observacoes_tramitacao:"",
+    });
+    setSel(proto);
+    setShowTramitar(true);
+  }
+
+  function confirmarTramitacao(){
+    if(!tramForm.area_destino||!tramForm.responsavel_destino){
+      alert("Preencha a Área de Destino e o Responsável.");return;
+    }
+    setTramitando(true);
+    const historico={
+      data:tramForm.data_tramitacao,
+      de:sel.area_destino||sel.area_origem,
+      responsavel_de:sel.responsavel_destino||sel.responsavel_origem,
+      para:tramForm.area_destino,
+      responsavel_para:tramForm.responsavel_destino,
+      situacao:tramForm.situacao,
+      observacoes:tramForm.observacoes_tramitacao,
+      usuario:sessao.usuario,
+      timestamp:new Date().toISOString(),
+    };
+    const updated={
+      ...sel,
+      area_origem:sel.area_destino||sel.area_origem,
+      responsavel_origem:sel.responsavel_destino||sel.responsavel_origem,
+      email_origem:sel.email_destino||sel.email_origem,
+      area_destino:tramForm.area_destino,
+      responsavel_destino:tramForm.responsavel_destino,
+      email_destino:tramForm.email_destino||"",
+      data_tramitacao:tramForm.data_tramitacao,
+      situacao:tramForm.situacao,
+      prioridade:tramForm.prioridade,
+      observacoes_tramitacao:tramForm.observacoes_tramitacao,
+      historico:[historico,...(sel.historico||[])],
+      ultima_tramitacao:new Date().toISOString(),
+    };
+    const list=protos.map(p=>p.id===sel.id?updated:p);
+    setProtos(list);save(list);setSel(updated);
+    setTramitando(false);setShowTramitar(false);
+    setPage("detail");
+  }
+
+  function tf(k,v){setTramForm(p=>({...p,[k]:v}));}
+
+  function handleLogout(){encerrarSessao();onLogout();}
+
+  function submit(){
+    setSubmitting(true);
+    const proto={...form,id:Date.now(),created_at:new Date().toISOString(),criado_por:sessao.usuario};
+    const list=[proto,...protos];
+    setProtos(list);save(list);
+    setSubmitting(false);setSuccess(true);
+    setTimeout(()=>{setSuccess(false);setForm(blank());setStep(1);setPage("dashboard");},3000);
+  }
+
+  async function genEmail(){
+    if(!form.assunto)return;
+    setAiLoading(true);setAiEmail("");
+    try{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,messages:[{role:"user",content:`Você é o sistema SPDO da Câmara Municipal de Bayeux/PB. Gere SOMENTE o corpo do e-mail de notificação de tramitação, baseado no template NOTIFICACAO_MSG do config.py do sistema il.spdo (Interlegis). Português formal.\n\nNúmero do Protocolo: ${form.numero}\nData da Última Tramitação: ${form.data_tramitacao}\nAssunto: ${form.assunto}\nÁrea de Origem: ${form.area_origem||"—"}\nResponsável: ${form.responsavel_origem||"—"}\nÁrea de Destino: ${form.area_destino||"—"}\nResponsável Destino: ${form.responsavel_destino||"—"}\nSituação: ${form.situacao}`}]})});
+      const data=await res.json();
+      setAiEmail(data.content?.[0]?.text||"Erro.");
+    }catch{setAiEmail("Erro ao conectar com a IA.");}
+    setAiLoading(false);
+  }
+
+  async function syncJotform(silent=false){
+    if(!jfKey){if(!silent)setSyncMsg("⚠️ Configure a API Key do Jotform em ⚙️ Configurações.");return;}
+    setSyncing(true);if(!silent)setSyncMsg("");
+    try{
+      const res=await fetch(`https://api.jotform.com/form/${JF_FORM_ID}/submissions?apiKey=${jfKey}&limit=100&orderby=created_at,DESC`);
+      const data=await res.json();
+      if(data.responseCode!==200){setSyncMsg("❌ Erro: "+data.message);setSyncing(false);return;}
+      const imported=data.content.map(sub=>{
+        const a=sub.answers||{};
+        const get=(...ids)=>{for(const id of ids){const q=a[id];if(q?.answer)return typeof q.answer==="object"?Object.values(q.answer).join(" "):q.answer;}return "";};
+        return{id:"jf_"+sub.id,created_at:sub.created_at,numero:get("3")||`SPDO-JF-${sub.id.slice(-5)}`,tipo_documento:get("4")||"",assunto:get("5")||"",data_criacao:get("6")||sub.created_at?.split(" ")[0]||"",descricao:get("7")||"",area_origem:get("9")||"",responsavel_origem:get("10")||"",email_origem:get("11")||"",data_encaminhamento:get("12")||"",area_destino:get("14")||"",responsavel_destino:get("15")||"",email_destino:get("16")||"",data_tramitacao:get("17")||"",situacao:get("19")||"Em Tramitação",prioridade:get("20")||"Normal",observacoes_tramitacao:get("21")||"",email_notificacao:get("36")||"",link_drive:get("32")||"",_source:"jotform"};
+      });
+      const ids=new Set(protos.map(p=>p.id));
+      const news=imported.filter(p=>!ids.has(p.id));
+      if(!news.length){setSyncMsg(`✅ Nenhuma submissão nova. Total Jotform: ${imported.length}`);setSyncing(false);return;}
+      const merged=[...news,...protos];setProtos(merged);save(merged);
+      setSyncMsg(`✅ ${news.length} submissão(ões) importada(s) do Jotform!`);
+    }catch(e){if(!silent)setSyncMsg("❌ Erro: "+e.message);}
+    setSyncing(false);
+    setUltimaSync(new Date());
+  }
+
+  async function alterarSenha(e){
+    e.preventDefault();setMsgSenha("");
+    if(novaSenha!==novaSenha2){setMsgSenha("❌ As novas senhas não coincidem.");return;}
+    if(novaSenha.length<8){setMsgSenha("❌ A senha deve ter no mínimo 8 caracteres.");return;}
+    const hashAtual=await hashSenha(senhaAtual);
+    const u=getUsuarios();
+    if(!u||u[sessao.usuario]?.hash!==hashAtual){setMsgSenha("❌ Senha atual incorreta.");return;}
+    const novoHash=await hashSenha(novaSenha);
+    u[sessao.usuario].hash=novoHash;
+    localStorage.setItem("spdo_usuarios",JSON.stringify(u));
+    setUsuarios(u);
+    setSenhaAtual("");setNovaSenha("");setNovaSenha2("");
+    setMsgSenha("✅ Senha alterada com sucesso!");
+  }
+
+  async function adicionarUsuario(e){
+    e.preventDefault();setMsgSenha("");
+    if(!novoLogin||!novaNome||!novaSenha){setMsgSenha("❌ Preencha todos os campos.");return;}
+    if(novaSenha.length<8){setMsgSenha("❌ A senha deve ter no mínimo 8 caracteres.");return;}
+    const u=getUsuarios()||{};
+    if(u[novoLogin]){setMsgSenha("❌ Este nome de usuário já existe.");return;}
+    const hash=await hashSenha(novaSenha);
+    u[novoLogin]={nome:novaNome,hash,perfil:"operador",criado:new Date().toISOString()};
+    localStorage.setItem("spdo_usuarios",JSON.stringify(u));
+    setUsuarios({...u});
+    setNovoLogin("");setNovaNome("");setNovaSenha("");
+    setMsgSenha("✅ Usuário criado com sucesso!");
+  }
+
+  function removerUsuario(login){
+    if(login===sessao.usuario){setMsgSenha("❌ Você não pode remover seu próprio usuário.");return;}
+    if(!window.confirm(`Remover o usuário "${login}"?`))return;
+    const u=getUsuarios()||{};
+    delete u[login];
+    localStorage.setItem("spdo_usuarios",JSON.stringify(u));
+    setUsuarios({...u});
+    setMsgSenha("✅ Usuário removido.");
+  }
+
+  const filtered=protos.filter(p=>!search||[p.numero,p.assunto,p.area_origem,p.area_destino,p.situacao].some(f=>f?.toLowerCase().includes(search.toLowerCase())));
+  const stats={total:protos.length,tramitando:protos.filter(p=>["Em Tramitação","Aguardando Recebimento","Em Análise"].includes(p.situacao)).length,pendentes:protos.filter(p=>["Devolvido","Cancelado"].includes(p.situacao)).length,concluidos:protos.filter(p=>["Concluído","Arquivado"].includes(p.situacao)).length};
+
+  /* ── Steps do formulário ── */
+  function StepContent(){
+    if(success)return(<div style={{textAlign:"center",padding:"56px 0"}}><div style={{fontSize:52,marginBottom:12}}>🎉</div><h2 style={{color:"#15803d",fontSize:20,fontWeight:800}}>Protocolo Registrado!</h2><p style={{color:"#64748b",fontSize:14,marginTop:8}}>{form.numero} salvo com sucesso.</p><p style={{color:"#94a3b8",fontSize:12,marginTop:12}}>Redirecionando...</p></div>);
+    switch(step){
+      case 1:return(<><div style={s.hd}>📋 Identificação do Protocolo</div><Fld label="Número do Protocolo" required hint="Gerado automaticamente · Tabela: spdo.protocolo (MySQL)"><div style={{display:"flex",gap:8}}><input style={{...s.input,fontFamily:"monospace",fontWeight:700,color:"#002060",fontSize:13}} value={form.numero} readOnly/><button style={{...s.btn("secondary"),whiteSpace:"nowrap",fontSize:12}} onClick={()=>sf("numero",genNum())}>↺ Novo</button></div></Fld><div style={s.g2}><Fld label="Tipo de Documento" required><select style={s.sel} value={form.tipo_documento} onChange={e=>sf("tipo_documento",e.target.value)}><option value="">Selecione...</option>{TIPOS.map(t=><option key={t}>{t}</option>)}</select></Fld><Fld label="Data de Criação" required><input type="date" style={s.sel} value={form.data_criacao} onChange={e=>sf("data_criacao",e.target.value)}/></Fld></div><Fld label="Assunto" required hint="Campo: assunto — NOTIFICACAO_MSG (config.py)"><input style={s.input} value={form.assunto} onChange={e=>sf("assunto",e.target.value)} placeholder="Descreva o assunto do protocolo..."/></Fld><Fld label="Descrição / Observações Iniciais"><textarea style={s.ta} rows={3} value={form.descricao} onChange={e=>sf("descricao",e.target.value)} placeholder="Informações complementares..."/></Fld></>);
+      case 2:return(<><div style={s.hd}>🏛️ Área de Origem</div><Fld label="Área de Origem" required hint="Campo: area_origem"><select style={s.sel} value={form.area_origem} onChange={e=>sf("area_origem",e.target.value)}><option value="">Selecione...</option>{AREAS.map(a=><option key={a}>{a}</option>)}</select></Fld><Fld label="Responsável pelo Encaminhamento" required hint="Campo: responsavel_origem"><input style={s.input} value={form.responsavel_origem} onChange={e=>sf("responsavel_origem",e.target.value)} placeholder="Nome completo do servidor ou vereador"/></Fld><div style={s.g2}><Fld label="E-mail do Responsável de Origem"><input type="email" style={s.input} value={form.email_origem} onChange={e=>sf("email_origem",e.target.value)} placeholder="servidor@bayeux.pb.leg.br"/></Fld><Fld label="Data do Encaminhamento"><input type="date" style={s.sel} value={form.data_encaminhamento} onChange={e=>sf("data_encaminhamento",e.target.value)}/></Fld></div></>);
+      case 3:return(<><div style={s.hd}>📨 Área de Destino</div><Fld label="Área de Destino" required hint="Campo: area_destino"><select style={s.sel} value={form.area_destino} onChange={e=>sf("area_destino",e.target.value)}><option value="">Selecione...</option>{AREAS.map(a=><option key={a}>{a}</option>)}</select></Fld><Fld label="Responsável pelo Recebimento" required hint="Campo: responsavel_destino"><input style={s.input} value={form.responsavel_destino} onChange={e=>sf("responsavel_destino",e.target.value)} placeholder="Nome completo do servidor ou vereador"/></Fld><div style={s.g2}><Fld label="E-mail do Responsável de Destino"><input type="email" style={s.input} value={form.email_destino} onChange={e=>sf("email_destino",e.target.value)} placeholder="servidor@bayeux.pb.leg.br"/></Fld><Fld label="Data da Tramitação" required hint="Campo: data_tramitacao"><input type="date" style={s.sel} value={form.data_tramitacao} onChange={e=>sf("data_tramitacao",e.target.value)}/></Fld></div></>);
+      case 4:return(<><div style={s.hd}>📊 Situação e Prioridade</div><Fld label="Situação do Protocolo" required hint="Campo: situacao — NOTIFICACAO_MSG"><select style={s.sel} value={form.situacao} onChange={e=>sf("situacao",e.target.value)}>{SITUACOES.map(x=><option key={x}>{x}</option>)}</select></Fld><Fld label="Prioridade" required><RadioG name="prioridade" value={form.prioridade} options={Object.keys(PRIO_CFG)} onChange={v=>sf("prioridade",v)}/></Fld><Fld label="Observações da Tramitação"><textarea style={s.ta} rows={4} value={form.observacoes_tramitacao} onChange={e=>sf("observacoes_tramitacao",e.target.value)} placeholder="Histórico ou detalhes desta tramitação..."/></Fld></>);
+      case 5:return(<><div style={s.hd}>📁 Documentos e Anexos</div><div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:12,marginBottom:16,fontSize:12,color:"#166534"}}>PATH_ANEXOS = '/var/interlegis/spdo/anexos' · ENABLE_FLASH_MULTIFILE = True · SEARCH_LIMIT = 1000</div><Fld label="Documento Principal (PDF/DOC/DOCX)" required><div style={{border:"2px dashed #cbd5e1",borderRadius:8,padding:20,textAlign:"center",background:"#f8fafc"}}><div style={{fontSize:28,marginBottom:6}}>📄</div><div style={{fontSize:13,color:"#64748b"}}>Arraste o arquivo ou clique para selecionar</div><div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>PDF, DOC, DOCX — máx. 50 MB</div></div></Fld><Fld label="Anexos Adicionais" hint="Até 10 arquivos — imagens, planilhas, comprovantes"><div style={{border:"2px dashed #cbd5e1",borderRadius:8,padding:16,textAlign:"center",background:"#f8fafc"}}><div style={{fontSize:22}}>📎</div><div style={{fontSize:12,color:"#64748b",marginTop:4}}>Imagens, planilhas, comprovantes</div></div></Fld><Fld label="Link do Google Drive (opcional)" hint="Pasta ou arquivo no Google Drive da Câmara"><input style={s.input} value={form.link_drive} onChange={e=>sf("link_drive",e.target.value)} placeholder="https://drive.google.com/..."/></Fld></>);
+      case 6:return(<><div style={s.hd}>🔔 Notificações por E-mail</div><div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,padding:12,marginBottom:16,fontSize:12,color:"#92400e"}}>Assunto: [SPDO] O protocolo {form.numero} tramitou. · Remetente: naoresponda@bayeux.pb.leg.br</div><div style={s.g2}><Fld label="E-mail Principal para Notificação" required><input type="email" style={s.input} value={form.email_notificacao} onChange={e=>sf("email_notificacao",e.target.value)} placeholder="seu@bayeux.pb.leg.br"/></Fld><Fld label="E-mail Adicional"><input type="email" style={s.input} value={form.email_notificacao2} onChange={e=>sf("email_notificacao2",e.target.value)} placeholder="outro@bayeux.pb.leg.br"/></Fld></div><Fld label="Deseja receber notificações?"><RadioG name="aceitar_notificacoes" value={form.aceitar_notificacoes} options={["Sim","Não"]} onChange={v=>sf("aceitar_notificacoes",v)}/></Fld><div style={{marginTop:20}}><button onClick={genEmail} disabled={aiLoading} style={{...s.btn("gold"),marginBottom:12,fontSize:13}}>{aiLoading?"⏳ Gerando...":"✨ Gerar Prévia do E-mail com IA"}</button>{aiEmail&&<div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:14,fontSize:12,whiteSpace:"pre-wrap",fontFamily:"monospace",maxHeight:220,overflowY:"auto"}}>{aiEmail}</div>}</div></>);
+      default:return null;
+    }
+  }
+
+  const TITLES={dashboard:"Dashboard — Protocolos",form:"Novo Protocolo de Documento",detail:`Protocolo ${sel?.numero||""}`,config:"Configurações do Sistema"};
+
+  return(
+    <div style={{display:"flex",height:"100vh",fontFamily:"'IBM Plex Sans',system-ui,sans-serif",background:"#f0f4f8",overflow:"hidden"}}>
+
+      {/* ── Sidebar ── */}
+      <div style={{width:224,background:"#002060",display:"flex",flexDirection:"column",flexShrink:0}}>
+        <div style={{padding:"20px 18px 16px",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
+          <div style={{color:"#FFD700",fontSize:17,fontWeight:800}}>⚖️ SPDO</div>
+          <div style={{color:"rgba(255,255,255,0.5)",fontSize:10,marginTop:2}}>Sistema de Protocolo de Documentos</div>
+          <div style={{color:"rgba(255,215,0,0.65)",fontSize:9,marginTop:1,fontWeight:700}}>CÂMARA MUN. DE BAYEUX · PB</div>
+        </div>
+        <nav style={{padding:"10px 0",flex:1}}>
+          {NAV.map(n=>{const active=page===n.id||(n.id==="dashboard"&&page==="detail");return(<div key={n.id} onClick={()=>setPage(n.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 18px",cursor:"pointer",color:active?"#FFD700":"rgba(255,255,255,0.65)",background:active?"rgba(255,215,0,0.1)":"transparent",borderLeft:active?"3px solid #FFD700":"3px solid transparent",fontSize:13,fontWeight:active?700:400}}>{n.icon} {n.label}</div>);})}
+        </nav>
+        {/* Usuário logado + Sair */}
+        <div style={{padding:"14px 18px",borderTop:"1px solid rgba(255,255,255,0.1)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+            <div style={{width:32,height:32,borderRadius:"50%",background:"rgba(255,215,0,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>👤</div>
+            <div>
+              <div style={{color:"rgba(255,255,255,0.9)",fontSize:12,fontWeight:700}}>{sessao.nome}</div>
+              <div style={{color:"rgba(255,215,0,0.6)",fontSize:10}}>{sessao.perfil==="admin"?"Administrador":"Operador"}</div>
+            </div>
+          </div>
+          <button onClick={()=>setShowConfirmLogout(true)} style={{width:"100%",background:"rgba(220,38,38,0.15)",border:"1px solid rgba(220,38,38,0.3)",borderRadius:6,padding:"7px 0",color:"#fca5a5",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+            🚪 Sair do Sistema
+          </button>
+        </div>
+      </div>
+
+      {/* ── Main ── */}
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+
+        {/* Topbar */}
+        <div style={{background:"white",borderBottom:"1px solid #e2e8f0",padding:"14px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div>
+            <h1 style={{fontSize:17,fontWeight:800,color:"#002060"}}>{TITLES[page]}</h1>
+            <div style={{fontSize:11,color:"#94a3b8",marginTop:1}}>Câmara Municipal de Bayeux · Paraíba · Brasil</div>
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <span style={{background:"#dcfce7",color:"#166534",padding:"3px 10px",borderRadius:12,fontSize:11,fontWeight:700}}>● Online</span>
+            <span style={{background:"#dbeafe",color:"#1e40af",padding:"3px 10px",borderRadius:12,fontSize:11,fontWeight:700}}>DB: spdo</span>
+            <span style={{background:"#f3e8ff",color:"#6b21a8",padding:"3px 10px",borderRadius:12,fontSize:11,fontWeight:700}}>{protos.length} protocolo{protos.length!==1?"s":""}</span>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div style={{flex:1,overflowY:"auto",padding:24}}>
+
+          {/* Dashboard */}
+          {page==="dashboard"&&(<>
+            <div style={{display:"flex",gap:14,marginBottom:20,flexWrap:"wrap"}}>
+              {[{label:"Total de Protocolos",val:stats.total,color:"#002060",icon:"📋"},{label:"Em Tramitação",val:stats.tramitando,color:"#d97706",icon:"🔄"},{label:"Devolvidos/Cancelados",val:stats.pendentes,color:"#dc2626",icon:"⚠️"},{label:"Concluídos/Arquivados",val:stats.concluidos,color:"#15803d",icon:"✅"}].map(c=>(<div key={c.label} style={{flex:1,minWidth:140,background:"white",borderRadius:10,borderTop:`4px solid ${c.color}`,padding:16,border:"1px solid #e2e8f0"}}><div style={{fontSize:22}}>{c.icon}</div><div style={{fontSize:26,fontWeight:800,color:c.color,margin:"6px 0 2px"}}>{c.val}</div><div style={{fontSize:12,color:"#64748b"}}>{c.label}</div></div>))}
+            </div>
+            <div style={s.card}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:10}}>
+                <span style={{fontSize:14,fontWeight:700,color:"#002060"}}>📋 Protocolos Registrados</span>
+                <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                  <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Buscar..." style={{...s.sel,width:170}}/>
+                  <button onClick={()=>syncJotform(false)} disabled={syncing} style={{...s.btn("gold"),whiteSpace:"nowrap",fontSize:13}}>{syncing?"⏳ Sincronizando...":"🔄 Sincronizar Jotform"}</button>
+                  <button onClick={()=>setPage("form")} style={{...s.btn("primary"),fontSize:13}}>+ Novo Protocolo</button>
                 </div>
+              </div>
+              {syncMsg&&<div style={{background:syncMsg.startsWith("✅")?"#dcfce7":"#fee2e2",border:`1px solid ${syncMsg.startsWith("✅")?"#86efac":"#fca5a5"}`,borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13,color:syncMsg.startsWith("✅")?"#166534":"#991b1b"}}>{syncMsg}</div>}
+              {autoSync&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:"8px 14px",marginBottom:14,fontSize:12,color:"#1e40af",display:"flex",alignItems:"center",gap:8}}>
+                <span style={{animation:"spin 2s linear infinite",display:"inline-block"}}>🔄</span>
+                <span><strong>Sincronização automática ativa</strong> — a cada {autoInterval} min{ultimaSync&&` · Última: ${ultimaSync.toLocaleTimeString("pt-BR")}`}</span>
+                <button onClick={()=>setAutoSync(false)} style={{marginLeft:"auto",background:"none",border:"1px solid #bfdbfe",borderRadius:6,padding:"2px 8px",cursor:"pointer",color:"#1e40af",fontSize:11}}>Pausar</button>
+              </div>}
+              {filtered.length===0?(<div style={{textAlign:"center",padding:"48px 0",color:"#94a3b8"}}><div style={{fontSize:36,marginBottom:10}}>📭</div><div style={{fontSize:14,fontWeight:600,color:"#64748b",marginBottom:14}}>Nenhum protocolo encontrado</div><button onClick={()=>setPage("form")} style={s.btn("primary")}>+ Registrar Primeiro Protocolo</button></div>):(
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                    <thead><tr style={{background:"#f8fafc"}}>{["Número","Tipo","Assunto","Origem → Destino","Data","Situação","Prior.",""].map(h=>(<th key={h} style={{padding:"9px 10px",textAlign:"left",color:"#64748b",fontWeight:700,borderBottom:"2px solid #e2e8f0",whiteSpace:"nowrap",fontSize:11}}>{h}</th>))}</tr></thead>
+                    <tbody>{filtered.map((p,i)=>(<tr key={p.id} style={{background:i%2===0?"white":"#fafafa",cursor:"pointer"}} onClick={()=>{setSel(p);setPage("detail");}}><td style={{padding:"9px 10px",fontFamily:"monospace",fontSize:11}}><div style={{fontWeight:700,color:"#002060"}}>{p.numero}</div>{p._source==="jotform"&&<span style={{background:"#dbeafe",color:"#1e40af",fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:4,marginTop:2,display:"inline-block"}}>Jotform</span>}</td><td style={{padding:"9px 10px",color:"#374151"}}>{p.tipo_documento||"—"}</td><td style={{padding:"9px 10px",color:"#374151",maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.assunto||"—"}</td><td style={{padding:"9px 10px",fontSize:11}}><span style={{color:"#002060",fontWeight:600}}>{p.area_origem||"—"}</span><span style={{margin:"0 5px",color:"#94a3b8"}}>→</span><span style={{color:"#15803d",fontWeight:600}}>{p.area_destino||"—"}</span></td><td style={{padding:"9px 10px",color:"#64748b",whiteSpace:"nowrap"}}>{p.data_tramitacao?new Date(p.data_tramitacao+"T12:00").toLocaleDateString("pt-BR"):"—"}</td><td style={{padding:"9px 10px"}}><SBadge status={p.situacao}/></td><td style={{padding:"9px 10px"}}><PBadge p={p.prioridade}/></td><td style={{padding:"9px 10px"}}><button style={{...s.btn("secondary"),padding:"5px 10px",fontSize:11}}>Ver</button></td></tr>))}</tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>)}
 
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#333", marginBottom: 6 }}>Senha</label>
-                  <div style={{ position: "relative" }}>
-                    <input
-                      type={mostrarSenha ? "text" : "password"}
-                      style={{ width: "100%", padding: "10px 12px", border: "1px solid #ddd", borderRadius: 4, fontSize: 13 }}
-                      value={senha}
-                      onChange={e => setSenha(e.target.value)}
-                      placeholder="Digite sua senha"
-                      disabled={loading}
-                    />
+          {/* Detail */}
+          {page==="detail"&&sel&&(<>
+            <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+              <button onClick={()=>{setPage("dashboard");setSel(null);}} style={{...s.btn("secondary"),fontSize:13}}>← Voltar</button>
+              <button onClick={()=>abrirTramitar(sel)} style={{...s.btn("primary"),fontSize:13}}>📨 Tramitar Protocolo</button>
+              {sel.situacao!=="Concluído"&&sel.situacao!=="Arquivado"&&(
+                <button onClick={()=>{
+                  const updated={...sel,situacao:"Concluído",ultima_tramitacao:new Date().toISOString(),historico:[{data:today(),de:sel.area_destino,responsavel_de:sel.responsavel_destino,para:sel.area_destino,responsavel_para:sel.responsavel_destino,situacao:"Concluído",observacoes:"Protocolo concluído.",usuario:sessao.usuario,timestamp:new Date().toISOString()},...(sel.historico||[])]};
+                  const list=protos.map(p=>p.id===sel.id?updated:p);
+                  setProtos(list);save(list);setSel(updated);
+                }} style={{...s.btn("success"),fontSize:13}}>✅ Concluir</button>
+              )}
+              {sel.situacao!=="Arquivado"&&(
+                <button onClick={()=>{
+                  const updated={...sel,situacao:"Arquivado",ultima_tramitacao:new Date().toISOString()};
+                  const list=protos.map(p=>p.id===sel.id?updated:p);
+                  setProtos(list);save(list);setSel(updated);
+                }} style={{...s.btn("secondary"),fontSize:13}}>🗂️ Arquivar</button>
+              )}
+            </div>
+            <div style={s.card}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
+                <div><div style={{fontFamily:"monospace",fontSize:17,fontWeight:800,color:"#002060"}}>{sel.numero}</div><div style={{fontSize:14,color:"#374151",marginTop:4}}>{sel.assunto}</div><div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{sel.tipo_documento} · {new Date(sel.created_at).toLocaleString("pt-BR")}</div></div>
+                <div style={{display:"flex",gap:8,flexShrink:0}}><PBadge p={sel.prioridade}/><SBadge status={sel.situacao}/></div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:16}}>
+                {[{l:"Criação",v:sel.data_criacao?new Date(sel.data_criacao+"T12:00").toLocaleDateString("pt-BR"):"—"},{l:"Encaminhamento",v:sel.data_encaminhamento?new Date(sel.data_encaminhamento+"T12:00").toLocaleDateString("pt-BR"):"—"},{l:"Tramitação",v:sel.data_tramitacao?new Date(sel.data_tramitacao+"T12:00").toLocaleDateString("pt-BR"):"—"}].map(f=>(<div key={f.l} style={{background:"#f8fafc",borderRadius:8,padding:12}}><div style={{fontSize:10,color:"#94a3b8",fontWeight:700,textTransform:"uppercase"}}>{f.l}</div><div style={{fontSize:14,fontWeight:700,color:"#1e293b",marginTop:4}}>{f.v}</div></div>))}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+                <div style={{background:"#eff6ff",borderRadius:8,padding:14}}><div style={{fontSize:11,fontWeight:700,color:"#1e40af",marginBottom:8,textTransform:"uppercase"}}>🏛️ Origem</div><div style={{fontWeight:700}}>{sel.area_origem||"—"}</div><div style={{color:"#64748b",fontSize:12,marginTop:3}}>{sel.responsavel_origem||"—"}</div>{sel.email_origem&&<div style={{color:"#94a3b8",fontSize:11,marginTop:2}}>{sel.email_origem}</div>}</div>
+                <div style={{background:"#f0fdf4",borderRadius:8,padding:14}}><div style={{fontSize:11,fontWeight:700,color:"#166534",marginBottom:8,textTransform:"uppercase"}}>📨 Destino</div><div style={{fontWeight:700}}>{sel.area_destino||"—"}</div><div style={{color:"#64748b",fontSize:12,marginTop:3}}>{sel.responsavel_destino||"—"}</div>{sel.email_destino&&<div style={{color:"#94a3b8",fontSize:11,marginTop:2}}>{sel.email_destino}</div>}</div>
+              </div>
+              {sel.observacoes_tramitacao&&<div style={{padding:12,background:"#f8fafc",borderRadius:8,borderLeft:"4px solid #002060",marginBottom:12}}><div style={{fontSize:11,color:"#94a3b8",fontWeight:700,marginBottom:4}}>OBSERVAÇÕES</div><div style={{color:"#374151",fontSize:13}}>{sel.observacoes_tramitacao}</div></div>}
+              {sel.link_drive&&<div style={{padding:12,background:"#f0fdf4",borderRadius:8}}><div style={{fontSize:11,color:"#94a3b8",fontWeight:700,marginBottom:4}}>GOOGLE DRIVE</div><a href={sel.link_drive} target="_blank" rel="noreferrer" style={{color:"#002060",fontSize:13}}>{sel.link_drive}</a></div>}
+              {sel.historico&&sel.historico.length>0&&(
+                <div style={{marginTop:16}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"#002060",marginBottom:10,paddingTop:14,borderTop:"1px solid #e2e8f0"}}>📋 Histórico de Tramitações</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {sel.historico.map((h,i)=>(
+                      <div key={i} style={{background:"#f8fafc",borderRadius:8,padding:12,borderLeft:"3px solid #002060",fontSize:12}}>
+                        <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:4,marginBottom:6}}>
+                          <span style={{fontWeight:700,color:"#002060"}}>{new Date(h.timestamp).toLocaleString("pt-BR")}</span>
+                          <SBadge status={h.situacao}/>
+                        </div>
+                        <div style={{color:"#374151"}}>
+                          <span style={{fontWeight:600}}>{h.de}</span>
+                          <span style={{margin:"0 6px",color:"#94a3b8"}}>→</span>
+                          <span style={{fontWeight:600,color:"#15803d"}}>{h.para}</span>
+                        </div>
+                        <div style={{color:"#64748b",marginTop:3}}>Resp.: {h.responsavel_de} → {h.responsavel_para}</div>
+                        {h.observacoes&&<div style={{color:"#475569",marginTop:4,fontStyle:"italic"}}>"{h.observacoes}"</div>}
+                        <div style={{color:"#94a3b8",fontSize:10,marginTop:4}}>Por: {h.usuario} · {h.data}</div>
+                      </div>
+                    ))}
                   </div>
                 </div>
+              )}
+              <div style={{marginTop:16,paddingTop:12,borderTop:"1px solid #e2e8f0",fontSize:11,color:"#94a3b8"}}>Registrado em: {new Date(sel.created_at).toLocaleString("pt-BR")} · MySQL: spdo · InnoDB{sel.criado_por&&` · Por: ${sel.criado_por}`}</div>
+            </div>
+          </>)}
 
-                {erro && <div style={{ background: "#fee2e2", color: "#991b1b", padding: "10px 12px", borderRadius: 4, fontSize: 13, marginBottom: 16, border: "1px solid #fca5a5" }}>{erro}</div>}
+          {/* Form */}
+          {page==="form"&&(<>
+            <div style={{display:"flex",background:"white",borderRadius:10,padding:4,marginBottom:16,border:"1px solid #e2e8f0",overflowX:"auto"}}>
+              {STEPS.map(st=>(<div key={st.n} onClick={()=>!success&&setStep(st.n)} style={{display:"flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:step===st.n?700:400,whiteSpace:"nowrap",background:step===st.n?"#002060":"transparent",color:step===st.n?"white":step>st.n?"#15803d":"#94a3b8"}}>{st.icon} {st.label}{step>st.n&&<span style={{fontSize:10}}> ✓</span>}</div>))}
+            </div>
+            <div style={s.card}>
+              <StepContent/>
+              {!success&&<div style={{display:"flex",justifyContent:"space-between",marginTop:22,paddingTop:18,borderTop:"1px solid #e2e8f0"}}>
+                <button onClick={()=>step>1?setStep(x=>x-1):setPage("dashboard")} style={{...s.btn("secondary"),fontSize:13}}>{step===1?"← Cancelar":"← Anterior"}</button>
+                <span style={{alignSelf:"center",fontSize:12,color:"#94a3b8"}}>Etapa {step} de {STEPS.length}</span>
+                {step<STEPS.length?<button onClick={()=>setStep(x=>x+1)} style={{...s.btn("primary"),fontSize:13}}>Próximo →</button>:<button onClick={submit} disabled={submitting} style={{...s.btn("success"),fontSize:13}}>{submitting?"⏳ Registrando...":"✅ Registrar Protocolo"}</button>}
+              </div>}
+            </div>
+          </>)}
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  style={{
-                    width: "100%",
-                    padding: "11px 16px",
-                    background: "#002060",
-                    color: "white",
-                    border: "none",
-                    borderRadius: 4,
-                    fontSize: 13,
-                    fontWeight: 700,
-                    cursor: loading ? "not-allowed" : "pointer",
-                    opacity: loading ? 0.7 : 1
-                  }}
-                >
-                  {loading ? "Verificando..." : "Entrar no Sistema"}
-                </button>
+          {/* Config */}
+          {page==="config"&&(<>
+            {/* Alterar senha */}
+            <div style={s.card}>
+              <div style={s.hd}>🔒 Alterar Minha Senha</div>
+              <form onSubmit={alterarSenha}>
+                <div style={s.g2}>
+                  <Fld label="Senha Atual" required><input type="password" style={s.input} value={senhaAtual} onChange={e=>setSenhaAtual(e.target.value)} placeholder="••••••••"/></Fld>
+                  <div/>
+                  <Fld label="Nova Senha" required hint="Mínimo 8 caracteres"><input type="password" style={s.input} value={novaSenha} onChange={e=>setNovaSenha(e.target.value)} placeholder="••••••••"/></Fld>
+                  <Fld label="Confirmar Nova Senha" required><input type="password" style={s.input} value={novaSenha2} onChange={e=>setNovaSenha2(e.target.value)} placeholder="••••••••"/></Fld>
+                </div>
+                {msgSenha&&<div style={{background:msgSenha.startsWith("✅")?"#dcfce7":"#fee2e2",border:`1px solid ${msgSenha.startsWith("✅")?"#86efac":"#fca5a5"}`,borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13,color:msgSenha.startsWith("✅")?"#166534":"#991b1b"}}>{msgSenha}</div>}
+                <button type="submit" style={{...s.btn("primary"),fontSize:13}}>🔒 Alterar Senha</button>
               </form>
             </div>
-          </div>
 
-          <div style={{ background: "#001a4d", borderTop: "1px solid rgba(255,255,255,0.1)", padding: "16px", textAlign: "center", fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
-            <p>SUPD v2.0 • Câmara Municipal de Bayeux • 2026</p>
-          </div>
-        </div>
-      );
-    }
-
-    function Dashboard({ sessao, onLogout }) {
-      const [protos, setProtos] = useState([]);
-      const [page, setPage] = useState("dashboard");
-      const [search, setSearch] = useState("");
-
-      useEffect(() => {
-        try {
-          const r = localStorage.getItem("supd_protos");
-          if (r) setProtos(JSON.parse(r));
-        } catch {}
-      }, []);
-
-      function save(list) {
-        try {
-          localStorage.setItem("supd_protos", JSON.stringify(list));
-        } catch {}
-      }
-
-      const stats = {
-        total: protos.length,
-        tramitando: protos.filter(p => p.situacao === "Em Tramitação").length,
-        naoRecebidos: protos.filter(p => p.situacao === "Aguardando Recebimento").length
-      };
-
-      return (
-        <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: "#f5f5f5" }}>
-          {/* HEADER */}
-          <div style={{ background: "#002060", color: "white", borderBottom: "3px solid #FFD700", padding: "14px 20px" }}>
-            <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                <div style={{ fontSize: 28 }}>⚖️</div>
-                <h1 style={{ fontSize: 20, fontWeight: 700 }}>SUPD v2.0</h1>
+            {/* Gerenciar usuários (apenas admin) */}
+            {sessao.perfil==="admin"&&(<>
+              <div style={s.card}>
+                <div style={s.hd}>👥 Gerenciar Usuários do Sistema</div>
+                <div style={{overflowX:"auto",marginBottom:20}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                    <thead><tr style={{background:"#f8fafc"}}>{["Usuário","Nome","Perfil","Criado em",""].map(h=>(<th key={h} style={{padding:"9px 12px",textAlign:"left",color:"#64748b",fontWeight:700,borderBottom:"2px solid #e2e8f0",fontSize:11}}>{h}</th>))}</tr></thead>
+                    <tbody>{Object.entries(usuarios).map(([login,u])=>(<tr key={login} style={{borderBottom:"1px solid #f1f5f9"}}>
+                      <td style={{padding:"9px 12px",fontFamily:"monospace",fontWeight:700,color:"#002060"}}>{login}</td>
+                      <td style={{padding:"9px 12px",color:"#374151"}}>{u.nome}</td>
+                      <td style={{padding:"9px 12px"}}><span style={{background:u.perfil==="admin"?"#fef3c7":"#f0fdf4",color:u.perfil==="admin"?"#92400e":"#166534",padding:"2px 8px",borderRadius:6,fontSize:11,fontWeight:700}}>{u.perfil==="admin"?"Admin":"Operador"}</span></td>
+                      <td style={{padding:"9px 12px",color:"#94a3b8",fontSize:12}}>{u.criado?new Date(u.criado).toLocaleDateString("pt-BR"):"—"}</td>
+                      <td style={{padding:"9px 12px"}}>{login!==sessao.usuario&&<button onClick={()=>removerUsuario(login)} style={{...s.btn("danger"),padding:"5px 10px",fontSize:11}}>Remover</button>}</td>
+                    </tr>))}</tbody>
+                  </table>
+                </div>
+                <div style={{borderTop:"1px solid #e2e8f0",paddingTop:16}}>
+                  <div style={{fontSize:13,fontWeight:700,color:"#002060",marginBottom:12}}>➕ Adicionar Novo Usuário</div>
+                  <form onSubmit={adicionarUsuario}>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14}}>
+                      <Fld label="Login" required><input style={s.input} value={novoLogin} onChange={e=>setNovoLogin(e.target.value.toLowerCase().replace(/\s/g,""))} placeholder="ex: joao.silva"/></Fld>
+                      <Fld label="Nome Completo" required><input style={s.input} value={novaNome} onChange={e=>setNovaNome(e.target.value)} placeholder="João da Silva"/></Fld>
+                      <Fld label="Senha Inicial" required hint="Mínimo 8 caracteres"><input type="password" style={s.input} value={novaSenha} onChange={e=>setNovaSenha(e.target.value)} placeholder="••••••••"/></Fld>
+                    </div>
+                    <button type="submit" style={{...s.btn("success"),fontSize:13}}>➕ Criar Usuário</button>
+                  </form>
+                </div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-                <span style={{ fontSize: 13 }}>👤 {sessao.nome}</span>
-                <button
-                  onClick={() => { encerrarSessao(); onLogout(); }}
-                  style={{
-                    background: "rgba(255,255,255,0.2)",
-                    border: "none",
-                    borderRadius: 4,
-                    padding: "6px 12px",
-                    color: "white",
-                    cursor: "pointer",
-                    fontSize: 12,
-                    fontWeight: 500
-                  }}
-                >
-                  Sair
+            </>)}
+
+            {/* Jotform API Key */}
+            <div style={s.card}>
+              <div style={s.hd}>⚡ Sincronização Automática com Jotform</div>
+              <div style={{background:autoSync?"#f0fdf4":"#f8fafc",border:`1px solid ${autoSync?"#86efac":"#e2e8f0"}`,borderRadius:10,padding:16,marginBottom:16,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:12}}>
+                <div>
+                  <div style={{fontWeight:700,color:autoSync?"#15803d":"#374151",fontSize:14}}>{autoSync?"✅ Sincronização Automática Ativa":"⏸️ Sincronização Automática Pausada"}</div>
+                  <div style={{fontSize:12,color:"#64748b",marginTop:2}}>{autoSync?`Buscando respostas do Jotform a cada ${autoInterval} minuto(s)`:"Ative para importar respostas automaticamente em segundo plano"}</div>
+                  {ultimaSync&&<div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>Última sincronização: {ultimaSync.toLocaleString("pt-BR")}</div>}
+                </div>
+                <button onClick={()=>{if(!jfKey){setSyncMsg("⚠️ Salve a API Key do Jotform primeiro.");return;}setAutoSync(v=>!v);}} style={{...s.btn(autoSync?"danger":"success"),fontSize:13}}>
+                  {autoSync?"⏸️ Pausar":"▶️ Ativar"}
                 </button>
               </div>
+              <Fld label="Intervalo de sincronização" hint="Com que frequência o sistema busca novas respostas do Jotform">
+                <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                  {[1,2,5,10,15,30].map(m=>(
+                    <button key={m} onClick={()=>setAutoIntervalVal(m)}
+                      style={{padding:"8px 16px",borderRadius:8,border:`2px solid ${autoInterval===m?"#002060":"#e2e8f0"}`,background:autoInterval===m?"#002060":"white",color:autoInterval===m?"white":"#374151",fontWeight:700,cursor:"pointer",fontSize:13}}>
+                      {m} min
+                    </button>
+                  ))}
+                </div>
+              </Fld>
+            </div>
+            <div style={s.card}>
+              <div style={s.hd}>🔑 Jotform — API Key (Sincronização)</div>
+              <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:12,marginBottom:14,fontSize:12,color:"#1e40af",lineHeight:1.7}}>
+                <strong>Como obter:</strong> jotform.com → Minha Conta → API → copie a chave<br/>
+                <strong>Formulário:</strong> <a href={`https://form.jotform.com/${JF_FORM_ID}`} target="_blank" rel="noreferrer" style={{color:"#1e40af"}}>form.jotform.com/{JF_FORM_ID}</a>
+              </div>
+              <Fld label="Jotform API Key" hint="Salva localmente no navegador. Usada pelo botão 'Sincronizar Jotform'.">
+                <div style={{display:"flex",gap:8}}>
+                  <input type="password" style={{...s.input,flex:1}} value={jfKey} onChange={e=>setJfKey(e.target.value)} placeholder="Cole sua API Key aqui..."/>
+                  <button style={{...s.btn("primary"),fontSize:13}} onClick={()=>{localStorage.setItem("jf_key",jfKey);setSyncMsg("✅ API Key salva!");}}>Salvar</button>
+                </div>
+              </Fld>
+            </div>
+
+            {/* Banco de dados */}
+            <div style={s.card}>
+              <div style={s.hd}>🗄️ Banco de Dados — MySQL / SPDO</div>
+              <div style={{background:"#1e293b",borderRadius:10,padding:16,fontFamily:"monospace",fontSize:12,color:"#e2e8f0",lineHeight:1.9}}>
+                <div style={{color:"#94a3b8"}}># config.py — il.spdo (Interlegis)</div>
+                <div><span style={{color:"#f59e0b"}}>DEFAULT_DSN</span> = <span style={{color:"#86efac"}}>'mysql://root:interlegis@mysql_1/spdo?charset=utf8'</span></div>
+                <div><span style={{color:"#f59e0b"}}>TABLE_ARGS</span> = {"{"}<span style={{color:"#c084fc"}}>'mysql_engine'</span>:<span style={{color:"#86efac"}}>'InnoDB'</span>, <span style={{color:"#c084fc"}}>'mysql_charset'</span>:<span style={{color:"#86efac"}}>'utf8'</span>{"}"}</div>
+                <div><span style={{color:"#f59e0b"}}>PATH_ANEXOS</span> = <span style={{color:"#86efac"}}>'/var/interlegis/spdo/anexos'</span></div>
+                <div><span style={{color:"#f59e0b"}}>ENABLE_FLASH_MULTIFILE</span> = <span style={{color:"#60a5fa"}}>True</span> · <span style={{color:"#f59e0b"}}>SEARCH_LIMIT</span> = <span style={{color:"#60a5fa"}}>1000</span></div>
+              </div>
+            </div>
+          </>)}
+        </div>
+      </div>
+
+      {/* Modal Tramitar */}
+      {showTramitar&&sel&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
+          <div style={{background:"white",borderRadius:16,padding:32,maxWidth:560,width:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 24px 48px rgba(0,0,0,0.3)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
+              <div>
+                <h3 style={{color:"#002060",fontSize:18,fontWeight:800}}>📨 Tramitar Protocolo</h3>
+                <p style={{color:"#64748b",fontSize:13,marginTop:4,fontFamily:"monospace"}}>{sel.numero} — {sel.assunto}</p>
+              </div>
+              <button onClick={()=>setShowTramitar(false)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#94a3b8"}}>✕</button>
+            </div>
+
+            <div style={{background:"#f8fafc",borderRadius:8,padding:12,marginBottom:16,fontSize:12,color:"#475569",border:"1px solid #e2e8f0"}}>
+              <strong>Origem atual:</strong> {sel.area_destino||sel.area_origem} · {sel.responsavel_destino||sel.responsavel_origem}
+            </div>
+
+            <Fld label="Encaminhar para (Área de Destino)" required>
+              <select style={s.sel} value={tramForm.area_destino} onChange={e=>tf("area_destino",e.target.value)}>
+                <option value="">Selecione a área de destino...</option>
+                {AREAS.map(a=><option key={a}>{a}</option>)}
+              </select>
+            </Fld>
+
+            <Fld label="Responsável pelo Recebimento" required>
+              <input style={s.input} value={tramForm.responsavel_destino||""} onChange={e=>tf("responsavel_destino",e.target.value)} placeholder="Nome completo do servidor"/>
+            </Fld>
+
+            <div style={s.g2}>
+              <Fld label="E-mail do Responsável">
+                <input type="email" style={s.input} value={tramForm.email_destino||""} onChange={e=>tf("email_destino",e.target.value)} placeholder="servidor@bayeux.pb.leg.br"/>
+              </Fld>
+              <Fld label="Data da Tramitação" required>
+                <input type="date" style={s.sel} value={tramForm.data_tramitacao||""} onChange={e=>tf("data_tramitacao",e.target.value)}/>
+              </Fld>
+            </div>
+
+            <div style={s.g2}>
+              <Fld label="Nova Situação" required>
+                <select style={s.sel} value={tramForm.situacao||""} onChange={e=>tf("situacao",e.target.value)}>
+                  {SITUACOES.map(x=><option key={x}>{x}</option>)}
+                </select>
+              </Fld>
+              <Fld label="Prioridade">
+                <select style={s.sel} value={tramForm.prioridade||"Normal"} onChange={e=>tf("prioridade",e.target.value)}>
+                  {Object.keys(PRIO_CFG).map(x=><option key={x}>{x}</option>)}
+                </select>
+              </Fld>
+            </div>
+
+            <Fld label="Observações / Despacho">
+              <textarea style={s.ta} rows={3} value={tramForm.observacoes_tramitacao||""} onChange={e=>tf("observacoes_tramitacao",e.target.value)} placeholder="Informações sobre esta tramitação..."/>
+            </Fld>
+
+            <div style={{display:"flex",gap:12,marginTop:8}}>
+              <button onClick={()=>setShowTramitar(false)} style={{...s.btn("secondary"),flex:1}}>Cancelar</button>
+              <button onClick={confirmarTramitacao} disabled={tramitando} style={{...s.btn("primary"),flex:2}}>
+                {tramitando?"⏳ Registrando...":"📨 Confirmar Tramitação"}
+              </button>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* CONTENT */}
-          <div style={{ flex: 1, padding: "20px", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
-            {page === "dashboard" && (
-              <div>
-                <h2 style={{ color: "#002060", marginBottom: 20, fontSize: 24, fontWeight: 700 }}>Dashboard</h2>
-                
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 20 }}>
-                  <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
-                    <div style={{ fontSize: 32, fontWeight: 700, color: "#002060" }}>{stats.total}</div>
-                    <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>Total de Protocolos</div>
-                  </div>
-                  <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
-                    <div style={{ fontSize: 32, fontWeight: 700, color: "#FF9800" }}>{stats.tramitando}</div>
-                    <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>Em Tramitação</div>
-                  </div>
-                  <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
-                    <div style={{ fontSize: 32, fontWeight: 700, color: "#FF6B6B" }}>{stats.naoRecebidos}</div>
-                    <div style={{ fontSize: 12, color: "#666", marginTop: 4 }}>📬 Não Recebidos</div>
-                  </div>
-                </div>
-
-                <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
-                  <h3 style={{ color: "#002060", marginBottom: 16, fontSize: 16, fontWeight: 700 }}>Protocolos Registrados</h3>
-                  
-                  <div style={{ marginBottom: 16 }}>
-                    <input
-                      placeholder="🔍 Buscar protocolo..."
-                      value={search}
-                      onChange={e => setSearch(e.target.value)}
-                      style={{ width: "100%", maxWidth: 300, padding: "8px 12px", border: "1px solid #ddd", borderRadius: 4, fontSize: 13 }}
-                    />
-                  </div>
-
-                  {protos.length === 0 ? (
-                    <p style={{ color: "#999", textAlign: "center", padding: "40px 20px" }}>
-                      Nenhum protocolo registrado ainda
-                    </p>
-                  ) : (
-                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                      <thead>
-                        <tr style={{ borderBottom: "2px solid #ddd" }}>
-                          <th style={{ padding: "12px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#666" }}>Número</th>
-                          <th style={{ padding: "12px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#666" }}>Assunto</th>
-                          <th style={{ padding: "12px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#666" }}>Situação</th>
-                          <th style={{ padding: "12px", textAlign: "left", fontSize: 12, fontWeight: 700, color: "#666" }}>Prioridade</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {protos.map(p => (
-                          <tr key={p.id} style={{ borderBottom: "1px solid #eee" }}>
-                            <td style={{ padding: "12px", fontFamily: "monospace", fontWeight: 700, color: "#002060" }}>{p.numero}</td>
-                            <td style={{ padding: "12px" }}>{p.assunto}</td>
-                            <td style={{ padding: "12px" }}>
-                              <span style={{ background: "#d4edda", color: "#155724", padding: "4px 8px", borderRadius: 4, fontSize: 11, fontWeight: 700 }}>
-                                {p.situacao || "—"}
-                              </span>
-                            </td>
-                            <td style={{ padding: "12px", fontSize: 12 }}>{p.prioridade || "—"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {page === "novo" && (
-              <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 24 }}>
-                <h2 style={{ color: "#002060", marginBottom: 16, fontSize: 18, fontWeight: 700 }}>Novo Protocolo</h2>
-                <p style={{ color: "#666" }}>🚀 Funcionalidade em desenvolvimento...</p>
-              </div>
-            )}
-
-            {page === "config" && (
-              <div style={{ background: "white", border: "1px solid #ddd", borderRadius: 8, padding: 24 }}>
-                <h2 style={{ color: "#002060", marginBottom: 16, fontSize: 18, fontWeight: 700 }}>Configurações</h2>
-                <p style={{ color: "#666" }}>⚙️ Funcionalidade em desenvolvimento...</p>
-              </div>
-            )}
-          </div>
-
-          {/* FOOTER */}
-          <div style={{ background: "#f9f9f9", borderTop: "1px solid #ddd", padding: "16px", textAlign: "center", fontSize: 12, color: "#999" }}>
-            <p>© 2026 Câmara Municipal de Bayeux • SUPD v2.0</p>
+      {/* Modal de confirmação de logout */}}
+      {showConfirmLogout&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+          <div style={{background:"white",borderRadius:16,padding:32,maxWidth:380,width:"90%",textAlign:"center",boxShadow:"0 24px 48px rgba(0,0,0,0.3)"}}>
+            <div style={{fontSize:40,marginBottom:12}}>🚪</div>
+            <h3 style={{color:"#002060",fontSize:18,fontWeight:800,marginBottom:8}}>Sair do Sistema?</h3>
+            <p style={{color:"#64748b",fontSize:14,marginBottom:24}}>Sua sessão será encerrada. Você precisará fazer login novamente para acessar o SPDO.</p>
+            <div style={{display:"flex",gap:12,justifyContent:"center"}}>
+              <button onClick={()=>setShowConfirmLogout(false)} style={{...s.btn("secondary"),flex:1}}>Cancelar</button>
+              <button onClick={handleLogout} style={{...s.btn("danger"),flex:1}}>Confirmar Saída</button>
+            </div>
           </div>
         </div>
-      );
-    }
+      )}
+    </div>
+  );
+}
 
-    function App() {
-      const [sessao, setSessao] = useState(null);
-      const [inicializado, setInicializado] = useState(false);
+/* ════════════════════════════════════════════════════════════════
+   CONTROLADOR RAIZ — Login → Sistema
+════════════════════════════════════════════════════════════════ */
+function App(){
+  const[sessao,setSessao]=useState(null);
+  const[inicializado,setInicializado]=useState(false);
 
-      useEffect(() => {
-        inicializarUsuarios().then(() => {
-          const s = getSessao();
-          setSessao(s);
-          setInicializado(true);
-        });
-      }, []);
+  useEffect(()=>{
+    inicializarUsuarios().then(()=>{
+      const s=getSessao();
+      setSessao(s);
+      setInicializado(true);
+    });
+  },[]);
 
-      if (!inicializado) {
-        return (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#002060", color: "white", fontSize: 18, flexDirection: "column", gap: 16 }}>
-            <div style={{ fontSize: 48 }}>⚖️</div>
-            Carregando SUPD...
-          </div>
-        );
-      }
+  if(!inicializado)return(
+    <div style={{minHeight:"100vh",background:"#001040",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{textAlign:"center",color:"white"}}>
+        <div style={{fontSize:40,marginBottom:12}}>⚖️</div>
+        <div style={{fontSize:14,color:"rgba(255,255,255,0.6)"}}>Carregando SPDO...</div>
+      </div>
+    </div>
+  );
 
-      if (!sessao) {
-        return <LoginPage onLogin={s => setSessao(s)} />;
-      }
+  if(!sessao)return <LoginPage onLogin={s=>{setSessao(s);}}/>;
+  return <SistemaSPDO sessao={sessao} onLogout={()=>setSessao(null)}/>;
+}
 
-      return <Dashboard sessao={sessao} onLogout={() => setSessao(null)} />;
-    }
-
-    const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<App />);
-  </script>
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
 </body>
 </html>
